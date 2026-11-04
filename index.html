@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>우주 탐험 퀴즈</title>
+<style>
+:root{
+  --bg:#f4f6fb;--card:#fff;--text:#1b2033;--muted:#6b7390;--border:#dfe3ef;
+  --accent:#5b5bf0;--ok:#16a34a;--ok-bg:#dcfce7;--bad:#dc2626;--bad-bg:#fee2e2;--track:#e6e9f4;
+  --shadow:0 10px 30px rgba(30,40,90,.12);
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#0b1020;--card:#151b33;--text:#e8ecfb;--muted:#9aa3c7;--border:#2a3256;
+  --accent:#8b8bff;--ok:#4ade80;--ok-bg:#12351f;--bad:#f87171;--bad-bg:#3d1717;--track:#232a4a;
+  --shadow:0 10px 30px rgba(0,0,0,.5);}
+}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);
+  font:15px/1.5 system-ui,-apple-system,"Segoe UI","Malgun Gothic",Roboto,sans-serif;
+  display:flex;justify-content:center;padding:24px 16px}
+main{width:100%;max-width:440px}
+h1{font-size:20px;margin:0 0 4px;text-align:center}
+.sub{color:var(--muted);text-align:center;margin:0 0 20px;font-size:14px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow);padding:22px}
+.top{display:flex;justify-content:space-between;font-size:14px;color:var(--muted);margin-bottom:8px}
+.score b{color:var(--accent)}
+.bar{height:8px;background:var(--track);border-radius:99px;overflow:hidden;margin-bottom:20px}
+.fill{height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#5b5bf0,#ec4899,#f59e0b);transition:width .5s ease}
+.q{font-size:17px;font-weight:600;margin:0 0 16px;animation:in .35s ease}
+.opts{display:grid;gap:10px}
+.opt{font:inherit;text-align:left;color:var(--text);background:transparent;border:2px solid var(--border);
+  border-radius:12px;padding:12px 14px;cursor:pointer;transition:transform .15s,border-color .15s,background .15s;animation:in .35s ease backwards}
+.opt:nth-child(2){animation-delay:.05s}.opt:nth-child(3){animation-delay:.1s}.opt:nth-child(4){animation-delay:.15s}
+.opt:hover:not(:disabled){border-color:var(--accent);transform:translateY(-1px)}
+.opt:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.opt:disabled{cursor:default}
+.opt.correct{border-color:var(--ok);background:var(--ok-bg);animation:pop .45s ease}
+.opt.wrong{border-color:var(--bad);background:var(--bad-bg);animation:shake .45s}
+.fb{min-height:44px;margin-top:14px;font-size:14px;color:var(--muted)}
+.fb.ok{color:var(--ok)}.fb.bad{color:var(--bad)}
+.fb strong{display:block;font-size:15px}
+.next{font:inherit;font-weight:600;width:100%;margin-top:6px;padding:12px;border:0;border-radius:12px;
+  background:var(--accent);color:#fff;cursor:pointer;display:none}
+.next.show{display:block;animation:in .3s ease}
+.next:hover{filter:brightness(1.1)}
+.result{text-align:center;animation:in .5s ease}
+.emoji{font-size:72px;line-height:1.2;animation:bounce 1s ease infinite}
+.big{font-size:36px;font-weight:700;margin:4px 0}
+.msg{color:var(--muted);margin:0 0 18px}
+.flash-ok{animation:flashok .6s}.flash-bad{animation:flashbad .6s}
+@keyframes in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(1)}50%{transform:scale(1.04)}100%{transform:scale(1)}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+@keyframes flashok{0%{box-shadow:0 0 0 0 rgba(22,163,74,.6)}100%{box-shadow:0 0 0 24px rgba(22,163,74,0)}}
+@keyframes flashbad{0%{box-shadow:0 0 0 0 rgba(220,38,38,.6)}100%{box-shadow:0 0 0 24px rgba(220,38,38,0)}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<main>
+  <h1>🚀 우주 탐험 퀴즈</h1>
+  <p class="sub">10문제로 우주 지식을 테스트해 보세요</p>
+  <div class="card" id="card"></div>
+</main>
+<script>
+const Q=[
+ {q:"태양계에서 가장 큰 행성은?",o:["토성","목성","해왕성","지구"],a:1,e:"목성은 지구 약 1,300개가 들어갈 만큼 큽니다."},
+ {q:"달에 처음 발을 디딘 사람은?",o:["유리 가가린","버즈 올드린","닐 암스트롱","존 글렌"],a:2,e:"1969년 아폴로 11호의 닐 암스트롱입니다."},
+ {q:"'붉은 행성'이라고 불리는 행성은?",o:["화성","금성","수성","천왕성"],a:0,e:"표면의 산화철 때문에 붉게 보입니다."},
+ {q:"태양빛이 지구에 도달하는 데 걸리는 시간은 약?",o:["8초","8분","8시간","8일"],a:1,e:"약 8분 20초가 걸립니다."},
+ {q:"우리 은하의 이름은?",o:["안드로메다","마젤란","은하수","삼각형자리"],a:2,e:"우리 은하는 막대나선은하인 '은하수'입니다."},
+ {q:"태양계에서 가장 뜨거운 행성은?",o:["수성","금성","화성","목성"],a:1,e:"짙은 이산화탄소 온실효과로 약 465°C입니다."},
+ {q:"최초의 인공위성은?",o:["보이저 1호","허블","스푸트니크 1호","아폴로 1호"],a:2,e:"1957년 소련이 발사했습니다."},
+ {q:"토성의 가장 큰 위성은?",o:["타이탄","유로파","가니메데","트리톤"],a:0,e:"타이탄은 두꺼운 대기를 가진 위성입니다."},
+ {q:"빛이 1년 동안 가는 거리를 뜻하는 단위는?",o:["천문단위","파섹","광년","킬로미터"],a:2,e:"1광년은 약 9.46조 km입니다."},
+ {q:"2006년 행성에서 왜소행성으로 분류된 천체는?",o:["세레스","명왕성","에리스","하우메아"],a:1,e:"명왕성은 2006년 왜소행성이 되었습니다."}
+];
+const card=document.getElementById("card");
+let i=0,score=0,locked=false;
+const esc=s=>s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+function render(){
+  locked=false;
+  const d=Q[i];
+  card.innerHTML=`
+   <div class="top"><span>문제 ${i+1} / ${Q.length}</span><span class="score">점수 <b id="sc">${score}</b></span></div>
+   <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="${Q.length}" aria-valuenow="${i}"><div class="fill" id="fill"></div></div>
+   <p class="q">${esc(d.q)}</p>
+   <div class="opts">${d.o.map((t,k)=>`<button class="opt" data-k="${k}">${esc(t)}</button>`).join("")}</div>
+   <div class="fb" id="fb" aria-live="polite"></div>
+   <button class="next" id="next">${i===Q.length-1?"결과 보기":"다음 문제"} →</button>`;
+  requestAnimationFrame(()=>document.getElementById("fill").style.width=(i/Q.length*100)+"%");
+  card.querySelectorAll(".opt").forEach(b=>b.onclick=()=>pick(+b.dataset.k,b));
+  document.getElementById("next").onclick=()=>{i++;i<Q.length?render():finish()};
+}
+function pick(k,btn){
+  if(locked)return;locked=true;
+  const d=Q[i],ok=k===d.a,fb=document.getElementById("fb");
+  const opts=[...card.querySelectorAll(".opt")];
+  opts.forEach(b=>b.disabled=true);
+  if(ok){score++;btn.classList.add("correct");fb.className="fb ok";fb.innerHTML=`<strong>✅ 정답!</strong>${d.e}`;card.classList.add("flash-ok");}
+  else{btn.classList.add("wrong");opts[d.a].classList.add("correct");fb.className="fb bad";fb.innerHTML=`<strong>❌ 아쉬워요!</strong>${d.e}`;card.classList.add("flash-bad");}
+  setTimeout(()=>card.classList.remove("flash-ok","flash-bad"),650);
+  document.getElementById("sc").textContent=score;
+  document.getElementById("fill").style.width=((i+1)/Q.length*100)+"%";
+  document.getElementById("next").classList.add("show");
+  document.getElementById("next").focus();
+}
+function finish(){
+  const r=[[10,"🏆","우주 사령관!","완벽해요! 진정한 우주 전문가네요."],
+           [8,"🚀","우주 비행사","훌륭해요! 달 너머까지 갈 수 있겠어요."],
+           [5,"🛰️","우주 견습생","좋아요! 조금만 더 공부하면 됩니다."],
+           [0,"🌍","지구 탐험가","다시 도전해서 은하계로 떠나 보세요!"]];
+  const [,e,t,m]=r.find(x=>score>=x[0]);
+  card.innerHTML=`<div class="result">
+   <div class="emoji">${e}</div><div class="big">${score} / ${Q.length}</div>
+   <h2 style="margin:0 0 6px;font-size:18px">${t}</h2><p class="msg">${m}</p>
+   <div class="bar"><div class="fill" style="width:${score/Q.length*100}%"></div></div>
+   <button class="next show" id="again">🔄 다시 도전</button></div>`;
+  document.getElementById("again").onclick=()=>{i=0;score=0;render()};
+}
+render();
+</script>
+</body>
+</html>
