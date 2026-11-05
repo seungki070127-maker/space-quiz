@@ -1211,7 +1211,9 @@ const timerEl = $("m-flight-timer"), flightInput = $("m-flight");
 
 // MediaPipe 포즈 점 번호: 29 왼발꿈치, 30 오른발꿈치, 31 왼발앞꿈치, 32 오른발앞꿈치
 const FOOT_POINTS = [29, 30, 31, 32];
-const MIN_VIS = 0.3;            // 이보다 안 보이는 점은 빼고 평균
+// 이보다 안 보이는 점은 뺍니다. 발은 바지·바닥에 가려 점수가 낮게 나오는 경우가 많아(실제 영상에서 0.3~0.6)
+// 너무 높게 잡으면 멀쩡한 프레임까지 "발 없음"이 되어 낮게 둡니다.
+const MIN_VIS = 0.15;
 let running = false, cancel = false, result = null;
 
 const fps = () => parseInt($("m-fps").value, 10) || 30;
@@ -1221,13 +1223,19 @@ const seekTo = (t) => new Promise((res) => {
 });
 
 // 한 프레임의 발 높이 (y는 화면 위쪽이 0, 아래쪽이 1)
-//  - y   : 보이는 발 점들의 평균 → 이륙 판단용
-//  - low : 보이는 발 점 중 가장 아래 점 → 착지 판단용 (어느 한 점이라도 먼저 닿으면 착지)
+//  - y   : 보이는 발 점들의 평균 → 점프 구간 찾기용 (튀는 값에 덜 흔들림)
+//  - toe : 발앞꿈치(31, 32) 평균 → 이륙 순간용. 웅크릴 때 뒤꿈치는 먼저 들리지만 앞꿈치는 끝까지 바닥에 있음
+//  - low : 보이는 발 점 중 가장 아래 점 → 착지 순간용 (어느 한 점이라도 먼저 닿으면 착지)
+const TOE_POINTS = [31, 32];
 function footY(pose) {
-  if (!pose) return { y: null, low: null };
-  const pts = FOOT_POINTS.map((i) => pose[i]).filter((p) => p && (p.visibility === undefined || p.visibility >= MIN_VIS));
-  if (pts.length < 2) return { y: null, low: null };
-  return { y: pts.reduce((s, p) => s + p.y, 0) / pts.length, low: Math.max(...pts.map((p) => p.y)) };
+  const none = { y: null, low: null, toe: null };
+  if (!pose) return none;
+  const seen = (p) => p && (p.visibility === undefined || p.visibility >= MIN_VIS);
+  const pts = FOOT_POINTS.map((i) => pose[i]).filter(seen);
+  if (pts.length < 2) return none;
+  const toes = TOE_POINTS.map((i) => pose[i]).filter(seen);
+  const avg = (a) => a.reduce((s, p) => s + p.y, 0) / a.length;
+  return { y: avg(pts), low: Math.max(...pts.map((p) => p.y)), toe: toes.length ? avg(toes) : avg(pts) };
 }
 
 // 1) 영상 전체를 한 프레임씩 넘기며 발 높이 기록
@@ -1237,8 +1245,8 @@ async function collect() {
   for (let t = 0; t <= dur + 1e-6 && !cancel; t += step) {
     await seekTo(Math.min(t, dur));
     const pose = kit.detectRaw();
-    const { y, low } = footY(pose);
-    frames.push({ t: video.currentTime, y, low });
+    const { y, low, toe } = footY(pose);
+    frames.push({ t: video.currentTime, y, low, toe });
     if (y !== null) drawFeet(pose);
     status.textContent = "분석 중… " + Math.min(100, Math.round((t / dur) * 100)) + "%";
   }
@@ -1287,15 +1295,28 @@ function findJump(frames) {
   }
   if (!best) return { error: "점프를 찾지 못했어요. 발이 잘 보이게 옆에서 찍었는지 확인해 주세요" };
 
-  // y=0을 떠나는 순간: 구간 시작에서 뒤로 가며 loT 아래로 내려가는 곳을 찾고, 두 프레임 사이를 보간
-  const cross = (a, b) => {
-    const fa = frames[a], fb = frames[b], ha = H[a], hb = H[b];
+  // 두 프레임 사이에서 값이 thr를 지나는 시각 (선형 보간)
+  const crossAt = (S, thr, a, b) => {
+    const fa = frames[a], fb = frames[b], ha = S[a], hb = S[b];
     if (ha === null || hb === null || ha === hb) return fb.t;
-    return fa.t + ((loT - ha) / (hb - ha)) * (fb.t - fa.t);
+    const u = Math.min(1, Math.max(0, (thr - ha) / (hb - ha)));
+    return fa.t + u * (fb.t - fa.t);
   };
+  const cross = (a, b) => crossAt(H, loT, a, b);
+
+  // 이륙 순간: 발앞꿈치가 바닥을 떠나는 순간.
+  // 웅크리는 동안 뒤꿈치만 들려도 평균은 올라가서 카운트가 일찍 시작되던 문제를 막기 위해 앞꿈치만 봅니다.
+  // 또 점프 구간 시작보다 0.15초 넘게 앞으로는 거슬러 가지 않습니다(웅크림 구간까지 끌려가지 않게).
+  const toesSeen = frames.filter((f) => f.toe !== null).map((f) => f.toe);
+  const { ground: toeGround, noise: toeNoise } = findGround(toesSeen);
+  const T = frames.map((f) => (f.toe === null ? null : toeGround - f.toe));
+  const toeT = Math.max(toeNoise * 2, 0.004);
+  const earliest = frames[best.s].t - 0.15;
   let a = best.s;
-  while (a - 1 >= 0 && H[a - 1] !== null && H[a - 1] > loT) a--;
-  const takeoff = a - 1 >= 0 ? cross(a - 1, a) : frames[a].t;
+  while (a - 1 >= 0 && frames[a - 1].t >= earliest && T[a - 1] !== null && T[a - 1] > toeT) a--;
+  // a: 앞꿈치가 처음으로 확실히 떠 있는 프레임 → 바로 앞 프레임과 사이에서 toeT를 지나는 시각
+  while (a < best.e && T[a] !== null && T[a] <= toeT) a++;   // 구간 시작인데 앞꿈치는 아직 바닥이면 앞으로
+  const takeoff = a - 1 >= 0 && T[a - 1] !== null ? crossAt(T, toeT, a - 1, a) : frames[a].t;
 
   // 착지 순간: 가장 높이 뜬 뒤, 발의 가장 아래 점이 바닥 가로선(y=0)에 닿는 첫 순간
   const lows = frames.filter((f) => f.low !== null).map((f) => f.low);
@@ -1315,6 +1336,34 @@ function findJump(frames) {
     return frames[p].t + u * (frames[k].t - frames[p].t);
   };
   let landing = null;
+
+  // 착지 후보 ①: 발이 내려오다가 멈춘 순간 (뛴 자리와 다른 곳에 착지해 선까지 안 내려와도 잡힘)
+  //  - 가장 높은 곳에서 선까지 거리의 75% 이상 내려왔고
+  //  - 0.03초 뒤에도 더 내려가지 않으면(떨림 정도 이내) → 그 프레임에서 바닥에 닿은 것
+  //    (프레임 수와 상관없이 같은 시간 간격으로 봐서, 240fps에서 떨림을 멈춤으로 착각하지 않게)
+  const peakL = L[peakAt] !== null ? L[peakAt] : Math.max(...L.slice(best.s, best.e + 1).filter((v) => v !== null));
+  const stopEps = Math.max(lineNoise * 2, 0.003);
+  const STOP_WIN = 0.03;
+  let stopLanding = null;
+  for (let k = peakAt + 1; k + 1 < L.length; k++) {
+    if (L[k] === null) continue;
+    if (L[k] > peakL * 0.25) continue;                 // 아직 충분히 안 내려옴
+    let m = k + 1;
+    while (m < L.length && (L[m] === null || frames[m].t < frames[k].t + STOP_WIN - 1e-6)) m++;
+    if (m >= L.length) break;
+    if (L[k] - L[m] > stopEps) continue;               // 아직 내려가는 중
+    // 프레임 k에서 이미 바닥. 실제로 닿은 시각은 직전 프레임 p와 k 사이:
+    // p 직전의 내려오던 속도로 p에서 k의 높이까지 내려오는 데 걸리는 시간만큼 p 뒤 (k를 넘지 않게)
+    stopLanding = frames[k].t;
+    const p = prevValid(k), q = p > peakAt ? prevValid(p) : -1;
+    if (p > peakAt && q >= peakAt && L[p] !== null && L[q] !== null && L[q] > L[p] && L[p] > L[k]) {
+      const speed = (L[q] - L[p]) / (frames[p].t - frames[q].t);
+      stopLanding = Math.min(frames[k].t, frames[p].t + (L[p] - L[k]) / speed);
+    }
+    break;
+  }
+
+  // 착지 후보 ②: 발의 가장 아래 점이 바닥 가로선에 닿은 순간
   for (let k = peakAt + 1; k < L.length; k++) {
     if (L[k] === null || L[k] > landT) continue;
     // ① 선 근처까지 내려옴 → ② 0.1초 안에 선에 실제로 닿는 프레임이 있으면 그 순간으로
@@ -1324,7 +1373,9 @@ function findJump(frames) {
     else landing = crossZero(prevValid(k), k);       // 선보다 살짝 위에 착지한 경우
     break;
   }
-  if (landing === null) {                            // 끝까지 선에 안 닿으면: 예전 방식(평균 높이)으로
+  // 두 후보 중 먼저 온 것을 착지로 (둘 다 "이미 바닥"이라는 신호라서, 빠른 쪽이 실제 착지에 가까움)
+  if (stopLanding !== null && (landing === null || stopLanding < landing)) landing = stopLanding;
+  if (landing === null) {                            // 둘 다 없으면: 예전 방식(평균 높이)으로
     let b = best.e;
     while (b + 1 < H.length && H[b + 1] !== null && H[b + 1] > loT) b++;
     landing = b + 1 < H.length ? cross(b, b + 1) : frames[b].t;
@@ -1395,7 +1446,11 @@ btn.addEventListener("click", async () => {
     console.error(e);
     status.textContent = "이 화면에서는 모델을 실행하지 못했어요 (" + (e && e.message ? e.message : e) + ")";
   } finally {
+    // 자세 인식 화면이 다시 그려지면서 "사람을 찾지 못했어요" 같은 한 프레임용 문구로
+    // 분석 결과 문구를 덮어쓰지 않게, 결과 문구를 기억했다가 되돌립니다.
+    const resultMsg = status.textContent;
     kit.suspend(false);
+    status.textContent = resultMsg;
     if (!kit.isOn()) { canvas.hidden = true; video.controls = wasControls || true; }
     running = false; btn.textContent = "분석하기"; aiBtn.disabled = false;
     updateTimer();
