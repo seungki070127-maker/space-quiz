@@ -171,6 +171,9 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px s
 .ctl.mark { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .readout { margin-left: auto; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
 .flight-timer { color: var(--accent); font-weight: 800; }
+.m-result.just-measured { animation: measured 1.6s ease-out; }
+@keyframes measured { 0%, 30% { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 122, 51, .35), 0 0 40px -6px rgba(255, 122, 51, .6); } 100% { border-color: var(--line); box-shadow: none; } }
+@media (prefers-reduced-motion: reduce) { .m-result.just-measured { animation: none; border-color: var(--accent); } }
 .flight-timer + .readout { margin-left: 4px; }
 .m-field { display: grid; gap: 6px; }
 .m-field label { font-weight: 800; font-size: 15px; }
@@ -1303,6 +1306,16 @@ function updateTimer() {
 ["timeupdate", "seeked", "loadeddata"].forEach((ev) => video.addEventListener(ev, updateTimer));
 (function tick() { if (!video.paused) updateTimer(); requestAnimationFrame(tick); })();
 
+// 5) 분석이 끝나면 "내 서전트 높이 __cm" 칸으로 자동으로 내려가고 잠깐 강조
+function showResult() {
+  const card = document.querySelector(".m-result");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  card.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
+  card.classList.remove("just-measured");
+  void card.offsetWidth;            // 강조 애니메이션을 처음부터 다시
+  card.classList.add("just-measured");
+}
+
 // 분석하기 버튼
 btn.addEventListener("click", async () => {
   if (running) { cancel = true; return; }
@@ -1324,8 +1337,9 @@ btn.addEventListener("click", async () => {
     result = r;
     status.textContent = "분석 완료 · 이륙 " + r.takeoff.toFixed(3) + "초 · 착지 " + r.landing.toFixed(3) + "초 · 체공 " + r.flight.toFixed(3) + "초";
     flightInput.value = r.flight.toFixed(3);
-    flightInput.dispatchEvent(new Event("input", { bubbles: true }));   // 높이 계산(위쪽 코드)에 넘김
+    flightInput.dispatchEvent(new Event("input", { bubbles: true }));   // 높이 계산(위쪽 코드)에 넘김 → "내 서전트 높이 __cm"
     await seekTo(Math.max(0, r.takeoff - 0.3));                        // 이륙 직전으로 이동
+    showResult();
   } catch (e) {
     console.error(e);
     status.textContent = "이 화면에서는 모델을 실행하지 못했어요 (" + (e && e.message ? e.message : e) + ")";
