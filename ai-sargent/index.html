@@ -338,7 +338,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       "사람을 찾지 못했어요. 몸 전체가 보이게 찍어 주세요": "No person found. Film with your whole body in view",
       "새 영상 · 재생하거나 프레임을 넘겨 보세요": "New video · play it or step through frames",
       "인식 준비 완료 · 재생하거나 프레임을 넘겨 보세요": "Ready · play the video or step through frames",
-      "자세 인식을 껐어요": "Pose tracking is off",
+      "자세 인식을 껐어요": "Pose tracking is off", "일시정지": "Pause", "끝까지 재생했어요": "Reached the end",
       "착지 순간은 발이 떨어진 순간보다 뒤여야 해요. 영상을 앞으로 넘긴 뒤 다시 표시하세요.": "Landing must come after takeoff. Move the video forward and mark it again.",
       "체공 시간은 0.1초에서 1.5초 사이여야 해요.": "Air time must be between 0.1 and 1.5 seconds.",
       "기초": "Beginner", "중급": "Intermediate", "상급": "Advanced", "엘리트": "Elite",
@@ -956,7 +956,8 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     const s = 1 / parseInt(fps.value, 10);
     video.currentTime = Math.min(video.duration || Infinity, Math.max(0, video.currentTime + dir * s));
   };
-  $("m-play").addEventListener("click", () => { video.paused ? video.play().catch(() => {}) : video.pause(); });
+  // 자세 인식이 켜져 있으면(data-pose="on") 아래 모듈이 프레임 단위 재생을 맡습니다
+  $("m-play").addEventListener("click", () => { if (video.dataset.pose === "on") return; video.paused ? video.play().catch(() => {}) : video.pause(); });
   back.addEventListener("click", () => step(-1));
   fwd.addEventListener("click", () => step(1));
 
@@ -1049,18 +1050,28 @@ function detect(force) {
   status.textContent = "인식 중 · 관절 " + pose.length + "개 · " + video.currentTime.toFixed(3) + "초";
 }
 
-// 새 프레임이 화면에 나올 때마다 분석 (지원하지 않는 브라우저는 화면 갱신마다)
-const hasVFC = "requestVideoFrameCallback" in HTMLVideoElement.prototype;
-let looping = false;
-function loop() {
-  if (!on) { looping = false; return; }
-  try { detect(); } catch (e) { looping = false; stop("인식 중 오류가 났어요: " + e.message); return; }
-  if (hasVFC) video.requestVideoFrameCallback(loop); else requestAnimationFrame(loop);
+// 인식이 켜져 있을 때의 재생: 영상을 실제로 틀지 않고 한 프레임씩 넘기며 매 프레임을 분석합니다.
+// 그래서 화면의 영상과 관절이 항상 같은 프레임이고, 휴대폰이 느려도 프레임을 건너뛰지 않습니다.
+let stepping = false;
+const fps = () => parseInt(document.getElementById("m-fps").value, 10) || 30;
+function setPlayLabel() { playBtn.textContent = stepping ? "일시정지" : "재생/정지"; }
+function startStepping() {
+  if (video.duration && video.currentTime >= video.duration - 1 / fps()) video.currentTime = 0;
+  stepping = true; setPlayLabel(); nextStep();
 }
-function startLoop() { if (looping) return; looping = true; loop(); }
+function stopStepping(msg) { stepping = false; setPlayLabel(); if (msg) status.textContent = msg; }
+function nextStep() {
+  if (!stepping || !on) return;
+  const t = video.currentTime + 1 / fps();
+  if (!video.duration || t > video.duration) { stopStepping("끝까지 재생했어요"); return; }
+  video.currentTime = t;   // seeked 이벤트에서 분석한 뒤 다음 프레임으로
+}
+function togglePlay() { stepping ? stopStepping() : startStepping(); }
+const playBtn = document.getElementById("m-play");
+playBtn.addEventListener("click", () => { if (on) togglePlay(); });
 
 function stop(msg) {
-  on = false; clear();
+  on = false; clear(); stopStepping(); delete video.dataset.pose;
   canvas.hidden = true; video.controls = true;
   btn.textContent = "자세 인식 켜기"; btn.setAttribute("aria-pressed", "false");
   if (msg) status.textContent = msg;
@@ -1071,21 +1082,32 @@ btn.addEventListener("click", async () => {
   btn.disabled = true;
   try {
     await load();
-    on = true; lastTime = -1;
+    const wasPlaying = !video.paused;
+    video.pause();
+    on = true; lastTime = -1; video.dataset.pose = "on";
     canvas.hidden = false; video.controls = false;
     btn.textContent = "자세 인식 끄기"; btn.setAttribute("aria-pressed", "true");
     status.textContent = "인식 준비 완료 · 재생하거나 프레임을 넘겨 보세요";
     detect(true);
-    startLoop();
+    if (wasPlaying) startStepping();
   } catch (e) {
     console.error(e);
     status.textContent = "이 화면에서는 모델을 실행하지 못했어요 (" + (e && e.message ? e.message : e) + ")";
   } finally { btn.disabled = false; }
 });
 
-video.addEventListener("loadeddata", () => { btn.disabled = false; lastTime = -1; clear(); if (on) status.textContent = "새 영상 · 재생하거나 프레임을 넘겨 보세요"; });
-video.addEventListener("seeked", () => { if (on) { try { detect(true); } catch (e) { stop("인식 중 오류가 났어요: " + e.message); } } });
-video.addEventListener("play", () => { if (on) startLoop(); });
+video.addEventListener("loadeddata", () => { btn.disabled = false; lastTime = -1; stopStepping(); if (on) { detect(true); status.textContent = "새 영상 · 재생하거나 프레임을 넘겨 보세요"; } else clear(); });
+video.addEventListener("seeked", () => {
+  if (!on) return;
+  try { detect(true); } catch (e) { stop("인식 중 오류가 났어요: " + e.message); return; }
+  if (stepping) requestAnimationFrame(nextStep);
+});
+// 인식 중에는 영상이 직접 재생되지 않게 하고, 재생 요청은 프레임 단위 재생으로 바꿉니다
+video.addEventListener("play", () => { if (on) { video.pause(); togglePlay(); } });
+// 인식 중에는 영상 기본 버튼이 숨겨지므로, 영상을 눌러도 재생/정지되게 합니다
+video.addEventListener("click", () => { if (on) togglePlay(); });
+// 1프레임 버튼을 누르면 재생을 멈춥니다
+["m-back", "m-fwd"].forEach((id) => document.getElementById(id).addEventListener("click", () => { if (stepping) stopStepping(); }));
 canvas.hidden = true;
 </script>
 
