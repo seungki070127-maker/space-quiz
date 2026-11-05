@@ -1225,8 +1225,8 @@ const seekTo = (t) => new Promise((res) => {
 
 // 한 프레임의 발 높이 (y는 화면 위쪽이 0, 아래쪽이 1)
 //  - y   : 보이는 발 점들의 평균 → 점프 구간 찾기용 (튀는 값에 덜 흔들림)
-//  - toe : 발앞꿈치(31, 32) 평균 → 이륙 순간용. 웅크릴 때 뒤꿈치는 먼저 들리지만 앞꿈치는 끝까지 바닥에 있음
-//  - low : 보이는 발 점 중 가장 아래 점 → 착지 순간용 (어느 한 점이라도 먼저 닿으면 착지)
+//  - toe : 발앞꿈치(31, 32) 평균 → 참고용 (지금 판단에는 쓰지 않음)
+//  - low : 보이는 발 점 중 가장 아래 점 → 이륙·착지 순간용 (바닥을 누르는 점, 어느 한 점이라도 먼저 닿으면 착지)
 const TOE_POINTS = [31, 32];
 function footY(pose) {
   const none = { y: null, low: null, toe: null };
@@ -1305,19 +1305,24 @@ function findJump(frames) {
   };
   const cross = (a, b) => crossAt(H, loT, a, b);
 
-  // 이륙 순간: 발앞꿈치가 바닥을 떠나는 순간.
-  // 웅크리는 동안 뒤꿈치만 들려도 평균은 올라가서 카운트가 일찍 시작되던 문제를 막기 위해 앞꿈치만 봅니다.
-  // 또 점프 구간 시작보다 0.15초 넘게 앞으로는 거슬러 가지 않습니다(웅크림 구간까지 끌려가지 않게).
-  const toesSeen = frames.filter((f) => f.toe !== null).map((f) => f.toe);
-  const { ground: toeGround, noise: toeNoise } = findGround(toesSeen);
-  const T = frames.map((f) => (f.toe === null ? null : toeGround - f.toe));
-  const toeT = Math.max(toeNoise * 2, 0.004);
+  // 바닥 가로선(y=0): 발의 가장 아래 점이 가장 오래 머문 높이. 이륙과 착지 둘 다 이 선과 이 점으로 판단합니다.
+  // (같은 점·같은 선을 쓰면 관절 위치를 조금 잘못 짚어도 이륙과 착지에서 똑같이 틀려서 체공 시간에서는 상쇄됩니다)
+  const lows = frames.filter((f) => f.low !== null).map((f) => f.low);
+  const { ground: line, noise: lineNoise } = findGround(lows);
+  const L = frames.map((f) => (f.low === null ? null : line - f.low)); // 가로선보다 얼마나 위인지
+
+  // 이륙 순간: 발의 가장 아래 점이 바닥 가로선을 떠나는 순간.
+  //  - 웅크릴 때 뒤꿈치가 먼저 들리거나, 팔을 휘두르며 발 모양이 바뀌어 앞꿈치 위치가 흔들려도
+  //    실제로 바닥을 누르고 있는 가장 아래 점은 그대로라서, 뛰기 전에 카운트가 시작되지 않습니다.
+  //  - 점프 구간 시작보다 0.15초 넘게 앞으로는 거슬러 가지 않습니다(웅크림 구간까지 끌려가지 않게).
+  const T = L;
+  const toeT = Math.max(lineNoise * 2, 0.004);
   const earliest = frames[best.s].t - 0.15;
   let a = best.s;
   while (a - 1 >= 0 && frames[a - 1].t >= earliest && T[a - 1] !== null && T[a - 1] > toeT) a--;
-  // a: 앞꿈치가 처음으로 확실히 떠 있는 프레임
-  while (a < best.e && T[a] !== null && T[a] <= toeT) a++;   // 구간 시작인데 앞꿈치는 아직 바닥이면 앞으로
-  // 떠난 직후 두 프레임의 올라가는 속도로 거꾸로 그어서 앞꿈치가 y=0이었던 순간을 찾습니다.
+  // a: 발이 처음으로 확실히 떠 있는 프레임
+  while (a < best.e && T[a] !== null && T[a] <= toeT) a++;   // 구간 시작인데 발은 아직 바닥이면 앞으로
+  // 떠난 직후 두 프레임의 올라가는 속도로 거꾸로 그어서 발이 y=0이었던 순간을 찾습니다.
   // (한 프레임 사이에는 속도가 거의 그대로라 정확하고, "기준 높이를 넘은 프레임"을 쓰면 생기는 늦음이 없습니다)
   // 결과는 바로 앞의 바닥 프레임과 a 사이로 제한합니다.
   let takeoff = a - 1 >= 0 && T[a - 1] !== null ? crossAt(T, toeT, a - 1, a) : frames[a].t;
@@ -1331,9 +1336,6 @@ function findJump(frames) {
   }
 
   // 착지 순간: 가장 높이 뜬 뒤, 발의 가장 아래 점이 바닥 가로선(y=0)에 닿는 첫 순간
-  const lows = frames.filter((f) => f.low !== null).map((f) => f.low);
-  const { ground: line, noise: lineNoise } = findGround(lows);          // 가로선 위치 = 가장 아래 점이 가장 오래 머문 높이
-  const L = frames.map((f) => (f.low === null ? null : line - f.low)); // 가로선보다 얼마나 위인지
   // 선 근처(화면 높이의 1% 이내)로 내려오면 착지로 보되, 시각은 발이 선(y=0)에 닿는 순간으로 계산합니다.
   // (조금 앞뒤로 떨어져 선보다 살짝 위에 착지해도 놓치지 않기 위한 여유)
   const landT = Math.max(lineNoise * 3, 0.01);
