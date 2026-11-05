@@ -1478,6 +1478,9 @@ btn.addEventListener("click", async () => {
   const kit = window.AISargentPose;
   if (!kit || !video.duration) return;
   running = true; cancel = false; clearTimeout(showTimer);
+  // 이전 분석 결과를 먼저 지웁니다. 안 지우면 분석하는 동안 영상이 한 프레임씩 넘어갈 때
+  // 타이머가 이전 결과(이전 이륙·착지 시각)로 올라가다 멈추고, 이전 바닥선도 그대로 남아 보입니다.
+  result = null; placeLine(); updateTimer();
   btn.textContent = "분석 중지"; aiBtn.disabled = true;
   kit.stopPlayback(); video.pause();
   const canvas = kit.canvas, wasControls = video.controls;
