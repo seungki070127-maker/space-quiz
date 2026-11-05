@@ -1020,7 +1020,8 @@ async function load() {
     for (let i = 0; i < bin.length; i++) model[i] = bin.charCodeAt(i);
     const make = (delegate) => mp.PoseLandmarker.createFromOptions(fileset, {
       baseOptions: { modelAssetBuffer: model, delegate },
-      runningMode: "VIDEO", numPoses: 1
+      runningMode: "VIDEO", numPoses: 1,
+      minPoseDetectionConfidence: 0.5, minPosePresenceConfidence: 0.6, minTrackingConfidence: 0.6
     });
     try { landmarker = await make("GPU"); } catch (e) { landmarker = await make("CPU"); }
     drawer = new mp.DrawingUtils(ctx);
@@ -1042,12 +1043,63 @@ function detect(force) {
   ctx.drawImage(video, 0, 0, w, h);
   ts = Math.max(ts + 1, performance.now());
   const res = landmarker.detectForVideo(canvas, ts);
-  const pose = res.landmarks && res.landmarks[0];
-  if (!pose) { status.textContent = "사람을 찾지 못했어요. 몸 전체가 보이게 찍어 주세요"; return; }
-  const scale = Math.max(2, canvas.width / 360);
-  drawer.drawConnectors(pose, mp.PoseLandmarker.POSE_CONNECTIONS, { color: "#FF7A33", lineWidth: scale * 1.6 });
-  drawer.drawLandmarks(pose, { color: "#F6F4EE", fillColor: "#FF7A33", lineWidth: scale * 0.6, radius: scale * 1.4 });
+  const raw = res.landmarks && res.landmarks[0];
+  if (!raw) { resetSmooth(); status.textContent = "사람을 찾지 못했어요. 몸 전체가 보이게 찍어 주세요"; return; }
+  const pose = smooth(raw, video.currentTime);
+  drawPose(pose);
   status.textContent = "인식 중 · 관절 " + pose.length + "개 · " + video.currentTime.toFixed(3) + "초";
+}
+
+// ---------- 흔들림 줄이기: One Euro Filter ----------
+// 천천히 움직일 때는 강하게 다듬어 떨림을 없애고, 빠르게 움직일 때(점프)는 약하게 다듬어 늦게 따라오지 않게 합니다.
+// 화면 표시에만 쓰고, 원래 값(raw)은 그대로 둡니다.
+const SMOOTH = { minCutoff: 0.7, beta: 40, dCutoff: 1.0 };
+const alpha = (cutoff, dt) => { const r = 2 * Math.PI * cutoff * dt; return r / (r + 1); };
+class OneEuro {
+  constructor() { this.x = null; this.dx = 0; }
+  filter(v, dt) {
+    if (this.x === null) { this.x = v; return v; }
+    const dx = (v - this.x) / dt;
+    this.dx += alpha(SMOOTH.dCutoff, dt) * (dx - this.dx);
+    const cutoff = SMOOTH.minCutoff + SMOOTH.beta * Math.abs(this.dx);
+    this.x += alpha(cutoff, dt) * (v - this.x);
+    return this.x;
+  }
+}
+let filters = null, prevT = null;
+function resetSmooth() { filters = null; prevT = null; }
+function smooth(points, t) {
+  const dt = prevT === null ? 0 : t - prevT;
+  // 처음이거나, 뒤로 가거나, 크게 건너뛰면(0.5초 넘게) 처음부터 다시 다듬습니다
+  if (!filters || dt <= 0 || dt > 0.5) {
+    filters = points.map(() => [new OneEuro(), new OneEuro()]);
+    filters.forEach(([fx, fy], i) => { fx.filter(points[i].x, 1); fy.filter(points[i].y, 1); });
+    prevT = t;
+    return points;
+  }
+  prevT = t;
+  return points.map((p, i) => ({ ...p, x: filters[i][0].filter(p.x, dt), y: filters[i][1].filter(p.y, dt) }));
+}
+
+// 모델이 잘 안 보인다고 판단한 관절(visibility 낮음)은 그리지 않아 깜빡임을 줄입니다
+const VISIBLE = 0.5;
+function drawPose(pose) {
+  const w = canvas.width, h = canvas.height, s = Math.max(2, w / 360);
+  const ok = (p) => p && (p.visibility === undefined || p.visibility >= VISIBLE);
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "#FF7A33"; ctx.lineWidth = s * 1.6;
+  ctx.beginPath();
+  mp.PoseLandmarker.POSE_CONNECTIONS.forEach(({ start, end }) => {
+    const a = pose[start], b = pose[end];
+    if (!ok(a) || !ok(b)) return;
+    ctx.moveTo(a.x * w, a.y * h); ctx.lineTo(b.x * w, b.y * h);
+  });
+  ctx.stroke();
+  ctx.fillStyle = "#FF7A33"; ctx.strokeStyle = "#F6F4EE"; ctx.lineWidth = s * 0.6;
+  pose.forEach((p) => {
+    if (!ok(p)) return;
+    ctx.beginPath(); ctx.arc(p.x * w, p.y * h, s * 1.4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  });
 }
 
 // 인식이 켜져 있을 때의 재생: 영상을 실제로 틀지 않고 한 프레임씩 넘기며 매 프레임을 분석합니다.
@@ -1096,7 +1148,7 @@ btn.addEventListener("click", async () => {
   } finally { btn.disabled = false; }
 });
 
-video.addEventListener("loadeddata", () => { btn.disabled = false; lastTime = -1; stopStepping(); if (on) { detect(true); status.textContent = "새 영상 · 재생하거나 프레임을 넘겨 보세요"; } else clear(); });
+video.addEventListener("loadeddata", () => { btn.disabled = false; lastTime = -1; stopStepping(); resetSmooth(); if (on) { detect(true); status.textContent = "새 영상 · 재생하거나 프레임을 넘겨 보세요"; } else clear(); });
 video.addEventListener("seeked", () => {
   if (!on) return;
   try { detect(true); } catch (e) { stop("인식 중 오류가 났어요: " + e.message); return; }
