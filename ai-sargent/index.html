@@ -981,9 +981,13 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
   cam.addEventListener("change", onPick);
   $("gal").addEventListener("change", onPick);
 
-  const tick = () => ($("m-time").textContent = video.currentTime.toFixed(3) + "초");
-  video.addEventListener("timeupdate", tick);
-  video.addEventListener("seeked", tick);
+  // 오른쪽 영상 시각 표시: 신호(seeked)가 빠져도 멈추지 않게 화면을 그릴 때마다 직접 읽어 갱신
+  const timeEl = $("m-time");
+  (function tick() {
+    const text = video.currentTime.toFixed(3) + "초";
+    if (timeEl.dataset.v !== text) { timeEl.dataset.v = text; timeEl.textContent = text; }
+    requestAnimationFrame(tick);
+  })();
   const step = (dir) => {
     video.pause();
     const s = 1 / parseInt(fps.value, 10);
@@ -1435,13 +1439,14 @@ function placeLine() {
 new ResizeObserver(placeLine).observe(box);
 
 // 4) 타이머: 이륙 순간부터 오른쪽 초와 같은 속도로 오르고, 착지 순간 멈춤
+// 브라우저의 "이동 끝(seeked)" 신호는 빠르게 넘길 때 빠지는 경우가 있어서, 신호에 기대지 않고
+// 화면을 그릴 때마다(초당 약 60번) 영상의 지금 시각을 직접 읽어 갱신합니다. 글자가 바뀔 때만 다시 씁니다.
 function updateTimer() {
-  if (!result) { timerEl.textContent = "0.000초"; return; }
-  const v = Math.min(Math.max(video.currentTime - result.takeoff, 0), result.flight);
-  timerEl.textContent = v.toFixed(3) + "초";
+  const text = !result ? "0.000초"
+    : Math.min(Math.max(video.currentTime - result.takeoff, 0), result.flight).toFixed(3) + "초";
+  if (timerEl.dataset.v !== text) { timerEl.dataset.v = text; timerEl.textContent = text; }
 }
-["timeupdate", "seeked", "loadeddata"].forEach((ev) => video.addEventListener(ev, updateTimer));
-(function tick() { if (!video.paused) updateTimer(); requestAnimationFrame(tick); })();
+(function tick() { updateTimer(); requestAnimationFrame(tick); })();
 
 // 5) 분석이 끝나면 "내 서전트 높이 __cm" 칸으로 자동으로 내려가고 잠깐 강조
 let showTimer = 0;
