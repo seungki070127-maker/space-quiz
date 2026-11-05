@@ -1355,6 +1355,7 @@ function updateTimer() {
 (function tick() { if (!video.paused) updateTimer(); requestAnimationFrame(tick); })();
 
 // 5) 분석이 끝나면 "내 서전트 높이 __cm" 칸으로 자동으로 내려가고 잠깐 강조
+let showTimer = 0;
 function showResult() {
   const card = document.querySelector(".m-result");
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1369,7 +1370,7 @@ btn.addEventListener("click", async () => {
   if (running) { cancel = true; return; }
   const kit = window.AISargentPose;
   if (!kit || !video.duration) return;
-  running = true; cancel = false;
+  running = true; cancel = false; clearTimeout(showTimer);
   btn.textContent = "분석 중지"; aiBtn.disabled = true;
   kit.stopPlayback(); video.pause();
   const canvas = kit.canvas, wasControls = video.controls;
@@ -1388,7 +1389,8 @@ btn.addEventListener("click", async () => {
     flightInput.value = r.flight.toFixed(3);
     flightInput.dispatchEvent(new Event("input", { bubbles: true }));   // 높이 계산(위쪽 코드)에 넘김 → "내 서전트 높이 __cm"
     await seekTo(Math.max(0, r.takeoff - 0.3));                        // 이륙 직전으로 이동
-    showResult();
+    clearTimeout(showTimer);
+    showTimer = setTimeout(showResult, 1500);   // 측정이 끝나고 1.5초 뒤에 기록으로 이동
   } catch (e) {
     console.error(e);
     status.textContent = "이 화면에서는 모델을 실행하지 못했어요 (" + (e && e.message ? e.message : e) + ")";
