@@ -89,6 +89,11 @@ section.block .wrap { display: flex; flex-direction: column; gap: 40px; padding-
 .head { display: flex; flex-direction: column; gap: 12px; max-width: 760px; }
 .head h2 { font-size: clamp(34px, 5.6vw, 56px); }
 .head p { color: var(--muted); font-size: 18px; }
+.guide { display: grid; gap: 10px; margin-top: 4px; }
+.guide h3 { font-size: 20px; font-weight: 800; color: var(--fg); }
+.guide ul { list-style: none; padding: 0; display: grid; gap: 8px; }
+.guide li { display: flex; gap: 10px; align-items: baseline; color: var(--muted); font-size: 17px; }
+.guide li::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); transform: translateY(-2px); }
 .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
 .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 28px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
@@ -297,8 +302,12 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       "서전트 높이": "Jump height", "멀리뛰기 거리": "Jump distance",
       "더 높이": "Higher", "더 멀리": "Farther", "서전트 측정": "Vertical jump test", "자세 분석": "Form analysis",
       "운동 방향 제시": "Training plan", "망설임 없이": "No hesitation",
-      "카메라로 찍고": "Film it,", "바로 잰다": "measure it now",
-      "휴대폰을 옆에 세워 발끝이 보이게 점프를 찍으세요. 촬영이 끝나면 발이 떨어진 순간과 다시 닿은 순간을 표시하면 높이가 나옵니다.": "Stand your phone to the side and film the jump with your feet in view. Then mark the moment your feet leave the ground and the moment they land to get your height.",
+      "카메라로 찍고": "Film it,",
+      "영상촬영 가이드 라인": "Filming guidelines",
+      "폰을 고정한 상태로 영상을 찍으세요.": "Keep your phone fixed in place while filming.",
+      "발이 잘 보일 수 있게 찍으세요.": "Make sure your feet are clearly visible.",
+      "되도록 측면 수평에서 촬영할 수 있게 하세요.": "If possible, film from the side at a level angle.",
+      "몸 전체가 나올 수 있게 하세요.": "Keep your whole body in the frame.", "바로 잰다": "measure it now",
       "아직 찍은 영상이 없어요": "No video yet", "카메라 열기": "Open camera", "갤러리에서 영상 고르기": "Choose from gallery",
       "자세 인식 켜기": "Turn on pose tracking", "자세 인식 끄기": "Turn off pose tracking",
       "영상을 넣으면 MediaPipe로 관절을 찾아요": "Add a video and MediaPipe will find your joints",
@@ -478,7 +487,15 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     <div class="head">
       <p class="kicker">서전트 측정</p>
       <h2 class="display" id="measure-title">카메라로 찍고<br>바로 잰다</h2>
-      <p>휴대폰을 옆에 세워 발끝이 보이게 점프를 찍으세요. 촬영이 끝나면 발이 떨어진 순간과 다시 닿은 순간을 표시하면 높이가 나옵니다.</p>
+      <div class="guide">
+        <h3>영상촬영 가이드 라인</h3>
+        <ul>
+          <li>폰을 고정한 상태로 영상을 찍으세요.</li>
+          <li>발이 잘 보일 수 있게 찍으세요.</li>
+          <li>되도록 측면 수평에서 촬영할 수 있게 하세요.</li>
+          <li>몸 전체가 나올 수 있게 하세요.</li>
+        </ul>
+      </div>
     </div>
     <input type="file" id="cam" class="cam-input" accept="video/*" capture="environment" tabindex="-1" aria-hidden="true">
     <input type="file" id="gal" class="cam-input" accept="video/*" tabindex="-1" aria-hidden="true">
