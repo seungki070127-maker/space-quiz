@@ -170,6 +170,8 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px s
 .ctl:disabled { opacity: .4; cursor: not-allowed; }
 .ctl.mark { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .readout { margin-left: auto; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.flight-timer { color: var(--accent); font-weight: 800; }
+.flight-timer + .readout { margin-left: 4px; }
 .m-field { display: grid; gap: 6px; }
 .m-field label { font-weight: 800; font-size: 15px; }
 .m-field select, .m-field input { font: 500 16px var(--font-body); padding: 11px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); width: 100%; font-variant-numeric: tabular-nums; }
@@ -338,7 +340,10 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       "사람을 찾지 못했어요. 몸 전체가 보이게 찍어 주세요": "No person found. Film with your whole body in view",
       "새 영상 · 재생하거나 프레임을 넘겨 보세요": "New video · play it or step through frames",
       "인식 준비 완료 · 재생하거나 프레임을 넘겨 보세요": "Ready · play the video or step through frames",
-      "자세 인식을 껐어요": "Pose tracking is off", "일시정지": "Pause", "끝까지 재생했어요": "Reached the end",
+      "자세 인식을 껐어요": "Pose tracking is off", "분석하기": "Analyze", "분석 중지": "Stop analysis", "체공 시간": "Air time",
+      "모델 준비 중…": "Preparing model…", "분석을 멈췄어요": "Analysis stopped",
+      "발이 보이는 프레임이 너무 적어요. 발 전체가 나오게 옆에서 찍어 주세요": "Too few frames show your feet. Film from the side with your whole feet in view",
+      "점프를 찾지 못했어요. 발이 잘 보이게 옆에서 찍었는지 확인해 주세요": "No jump found. Check that you filmed from the side with your feet clearly visible", "일시정지": "Pause", "끝까지 재생했어요": "Reached the end",
       "착지 순간은 발이 떨어진 순간보다 뒤여야 해요. 영상을 앞으로 넘긴 뒤 다시 표시하세요.": "Landing must come after takeoff. Move the video forward and mark it again.",
       "체공 시간은 0.1초에서 1.5초 사이여야 해요.": "Air time must be between 0.1 and 1.5 seconds.",
       "기초": "Beginner", "중급": "Intermediate", "상급": "Advanced", "엘리트": "Elite",
@@ -358,7 +363,9 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       [/^인식 중 · 관절 (\d+)개 · ([\d.]+)초$/, (m) => "Tracking · " + m[1] + " joints · " + m[2] + " s"],
       [/^이 화면에서는 모델을 실행하지 못했어요 \((.*)\)$/, (m) => "The model couldn't run on this screen (" + m[1] + ")"],
       [/^인식 중 오류가 났어요: (.*)$/, (m) => "Pose tracking error: " + m[1]],
-      [/^문제가 생겼어요: (.*)$/, (m) => "Something went wrong: " + m[1]]
+      [/^문제가 생겼어요: (.*)$/, (m) => "Something went wrong: " + m[1]],
+      [/^분석 중… (\d+)%$/, (m) => "Analyzing… " + m[1] + "%"],
+      [/^분석 완료 · 이륙 ([\d.]+)초 · 착지 ([\d.]+)초 · 체공 ([\d.]+)초$/, (m) => "Done · takeoff " + m[1] + " s · landing " + m[2] + " s · air time " + m[3] + " s"]
     ];
     const toEn = (s) => {
       const k = s.replace(/\s+/g, " ").trim();
@@ -483,12 +490,14 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
         </div>
         <div class="m-ctl">
           <button type="button" class="ctl mark" id="m-ai" disabled aria-pressed="false">자세 인식 켜기</button>
+          <button type="button" class="ctl mark" id="m-analyze" disabled>분석하기</button>
           <span class="readout" id="m-ai-status" role="status">영상을 넣으면 MediaPipe로 관절을 찾아요</span>
         </div>
         <div class="m-ctl" aria-label="영상 프레임 이동">
           <button type="button" class="ctl" id="m-play" disabled>재생/정지</button>
           <button type="button" class="ctl" id="m-back" disabled aria-label="한 프레임 뒤로">◀ 1프레임</button>
           <button type="button" class="ctl" id="m-fwd" disabled aria-label="한 프레임 앞으로">1프레임 ▶</button>
+          <span class="readout flight-timer" id="m-flight-timer" aria-label="체공 시간">0.000초</span>
           <span class="readout" id="m-time">0.000초</span>
         </div>
         <div class="m-ctl">
@@ -1150,7 +1159,7 @@ btn.addEventListener("click", async () => {
 
 video.addEventListener("loadeddata", () => { btn.disabled = false; lastTime = -1; stopStepping(); resetSmooth(); if (on) { detect(true); status.textContent = "새 영상 · 재생하거나 프레임을 넘겨 보세요"; } else clear(); });
 video.addEventListener("seeked", () => {
-  if (!on) return;
+  if (!on || suspended) return;
   try { detect(true); } catch (e) { stop("인식 중 오류가 났어요: " + e.message); return; }
   if (stepping) requestAnimationFrame(nextStep);
 });
@@ -1161,7 +1170,177 @@ video.addEventListener("click", () => { if (on) togglePlay(); });
 // 1프레임 버튼을 누르면 재생을 멈춥니다
 ["m-back", "m-fwd"].forEach((id) => document.getElementById(id).addEventListener("click", () => { if (stepping) stopStepping(); }));
 canvas.hidden = true;
+
+// 분석하기(아래 별도 스크립트)가 쓰는 연결 통로: 모델 불러오기, 원래(다듬지 않은) 관절 값, 화면 표시 잠시 멈추기
+let suspended = false;
+window.AISargentPose = {
+  load,
+  isOn: () => on,
+  stopPlayback: () => stopStepping(),
+  suspend: (v) => { suspended = v; if (!v && on) { lastTime = -1; resetSmooth(); try { detect(true); } catch (e) {} } },
+  // 지금 영상 프레임을 캔버스에 그리고, 다듬지 않은 관절 33개를 돌려줍니다 (사람이 없으면 null)
+  detectRaw() {
+    const w = video.videoWidth, h = video.videoHeight;
+    if (!w || !h || !landmarker) return null;
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    ctx.drawImage(video, 0, 0, w, h);
+    ts = Math.max(ts + 1, performance.now());
+    const res = landmarker.detectForVideo(canvas, ts);
+    return (res.landmarks && res.landmarks[0]) || null;
+  },
+  canvas, ctx
+};
 </script>
+
+<!-- =====================================================================
+     분석하기 : 발꿈치·발앞꿈치 높이로 체공 시간 재기 (여기부터 분석 전용 코드)
+     - 위의 자세 인식 코드(window.AISargentPose)로 매 프레임 관절을 받아 발 점 4개만 씁니다.
+     - 발이 가장 오래 머문 높이를 y=0(바닥)으로 정하고,
+       y가 0 위로 떠나는 순간 = 이륙, 다시 0 근처로 돌아오는 순간 = 착지로 봅니다.
+     ===================================================================== -->
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const video = $("m-video"), btn = $("m-analyze"), aiBtn = $("m-ai"), status = $("m-ai-status");
+const timerEl = $("m-flight-timer"), flightInput = $("m-flight");
+
+// MediaPipe 포즈 점 번호: 29 왼발꿈치, 30 오른발꿈치, 31 왼발앞꿈치, 32 오른발앞꿈치
+const FOOT_POINTS = [29, 30, 31, 32];
+const MIN_VIS = 0.3;            // 이보다 안 보이는 점은 빼고 평균
+let running = false, cancel = false, result = null;
+
+const fps = () => parseInt($("m-fps").value, 10) || 30;
+const seekTo = (t) => new Promise((res) => {
+  video.addEventListener("seeked", res, { once: true });
+  video.currentTime = t;
+});
+
+// 한 프레임의 발 높이: 보이는 발 점들의 y 평균 (y는 화면 위쪽이 0, 아래쪽이 1)
+function footY(pose) {
+  if (!pose) return null;
+  const pts = FOOT_POINTS.map((i) => pose[i]).filter((p) => p && (p.visibility === undefined || p.visibility >= MIN_VIS));
+  if (pts.length < 2) return null;
+  return pts.reduce((s, p) => s + p.y, 0) / pts.length;
+}
+
+// 1) 영상 전체를 한 프레임씩 넘기며 발 높이 기록
+async function collect() {
+  const kit = window.AISargentPose, step = 1 / fps(), dur = video.duration;
+  const frames = [];
+  for (let t = 0; t <= dur + 1e-6 && !cancel; t += step) {
+    await seekTo(Math.min(t, dur));
+    const pose = kit.detectRaw();
+    const y = footY(pose);
+    frames.push({ t: video.currentTime, y });
+    if (y !== null) drawFeet(pose);
+    status.textContent = "분석 중… " + Math.min(100, Math.round((t / dur) * 100)) + "%";
+  }
+  return frames;
+}
+
+function drawFeet(pose) {
+  const { canvas, ctx } = window.AISargentPose, w = canvas.width, h = canvas.height, r = Math.max(4, w / 90);
+  ctx.fillStyle = "#FF7A33"; ctx.strokeStyle = "#F6F4EE"; ctx.lineWidth = r / 3;
+  FOOT_POINTS.forEach((i) => { const p = pose[i]; if (!p) return; ctx.beginPath(); ctx.arc(p.x * w, p.y * h, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); });
+}
+
+// 2) 바닥(y=0) 찾기: 발이 가장 오래 머문 높이 = 값이 가장 많이 몰린 구간
+function findGround(ys) {
+  const BIN = 0.004;
+  const sorted = [...ys].sort((a, b) => a - b);
+  let best = { n: 0, lo: 0 };
+  for (let i = 0, j = 0; i < sorted.length; i++) {
+    while (sorted[j] < sorted[i] - BIN * 2) j++;
+    if (i - j + 1 > best.n) best = { n: i - j + 1, lo: sorted[j], hi: sorted[i] };
+  }
+  const near = sorted.filter((v) => v >= best.lo && v <= best.hi);
+  const ground = near.reduce((s, v) => s + v, 0) / near.length;
+  const noise = Math.sqrt(near.reduce((s, v) => s + (v - ground) ** 2, 0) / near.length);
+  return { ground, noise };
+}
+
+// 3) 이륙·착지 찾기
+function findJump(frames) {
+  const valid = frames.filter((f) => f.y !== null);
+  if (valid.length < 10) return { error: "발이 보이는 프레임이 너무 적어요. 발 전체가 나오게 옆에서 찍어 주세요" };
+  const { ground, noise } = findGround(valid.map((f) => f.y));
+  // 높이 h: 바닥보다 얼마나 위인지 (위로 갈수록 +)
+  const H = frames.map((f) => (f.y === null ? null : ground - f.y));
+  const hiT = Math.max(noise * 4, 0.006);   // 확실히 떴다고 볼 높이 (점프 구간 찾기용)
+  const loT = Math.max(noise * 1.5, 0.002); // y=0을 떠났다/돌아왔다고 볼 높이 (순간 잡기용)
+
+  // 확실히 뜬 구간들 중 가장 높이 뜬 구간 = 점프
+  let best = null;
+  for (let i = 0; i < H.length; i++) {
+    if (H[i] === null || H[i] <= hiT) continue;
+    let j = i, peak = H[i];
+    while (j + 1 < H.length && (H[j + 1] === null || H[j + 1] > hiT)) { j++; if (H[j] !== null) peak = Math.max(peak, H[j]); }
+    if (j - i >= 1 && (!best || peak > best.peak)) best = { s: i, e: j, peak };
+    i = j;
+  }
+  if (!best) return { error: "점프를 찾지 못했어요. 발이 잘 보이게 옆에서 찍었는지 확인해 주세요" };
+
+  // y=0을 떠나는 순간: 구간 시작에서 뒤로 가며 loT 아래로 내려가는 곳을 찾고, 두 프레임 사이를 보간
+  const cross = (a, b) => {
+    const fa = frames[a], fb = frames[b], ha = H[a], hb = H[b];
+    if (ha === null || hb === null || ha === hb) return fb.t;
+    return fa.t + ((loT - ha) / (hb - ha)) * (fb.t - fa.t);
+  };
+  let a = best.s;
+  while (a - 1 >= 0 && H[a - 1] !== null && H[a - 1] > loT) a--;
+  const takeoff = a - 1 >= 0 ? cross(a - 1, a) : frames[a].t;
+  let b = best.e;
+  while (b + 1 < H.length && H[b + 1] !== null && H[b + 1] > loT) b++;
+  const landing = b + 1 < H.length ? cross(b, b + 1) : frames[b].t;
+  return { takeoff, landing, flight: landing - takeoff, ground, noise };
+}
+
+// 4) 타이머: 이륙 순간부터 오른쪽 초와 같은 속도로 오르고, 착지 순간 멈춤
+function updateTimer() {
+  if (!result) { timerEl.textContent = "0.000초"; return; }
+  const v = Math.min(Math.max(video.currentTime - result.takeoff, 0), result.flight);
+  timerEl.textContent = v.toFixed(3) + "초";
+}
+["timeupdate", "seeked", "loadeddata"].forEach((ev) => video.addEventListener(ev, updateTimer));
+(function tick() { if (!video.paused) updateTimer(); requestAnimationFrame(tick); })();
+
+// 분석하기 버튼
+btn.addEventListener("click", async () => {
+  if (running) { cancel = true; return; }
+  const kit = window.AISargentPose;
+  if (!kit || !video.duration) return;
+  running = true; cancel = false;
+  btn.textContent = "분석 중지"; aiBtn.disabled = true;
+  kit.stopPlayback(); video.pause();
+  const canvas = kit.canvas, wasControls = video.controls;
+  try {
+    status.textContent = "모델 준비 중…";
+    await kit.load();
+    kit.suspend(true);
+    canvas.hidden = false; video.controls = false;
+    const frames = await collect();
+    if (cancel) { status.textContent = "분석을 멈췄어요"; return; }
+    const r = findJump(frames);
+    if (r.error) { result = null; status.textContent = r.error; return; }
+    result = r;
+    status.textContent = "분석 완료 · 이륙 " + r.takeoff.toFixed(3) + "초 · 착지 " + r.landing.toFixed(3) + "초 · 체공 " + r.flight.toFixed(3) + "초";
+    flightInput.value = r.flight.toFixed(3);
+    flightInput.dispatchEvent(new Event("input", { bubbles: true }));   // 높이 계산(위쪽 코드)에 넘김
+    await seekTo(Math.max(0, r.takeoff - 0.3));                        // 이륙 직전으로 이동
+  } catch (e) {
+    console.error(e);
+    status.textContent = "이 화면에서는 모델을 실행하지 못했어요 (" + (e && e.message ? e.message : e) + ")";
+  } finally {
+    kit.suspend(false);
+    if (!kit.isOn()) { canvas.hidden = true; video.controls = wasControls || true; }
+    running = false; btn.textContent = "분석하기"; aiBtn.disabled = false;
+    updateTimer();
+  }
+});
+
+// 새 영상이 들어오면 이전 결과를 지우고 버튼을 켭니다
+video.addEventListener("loadeddata", () => { result = null; btn.disabled = false; updateTimer(); });
+</script>
+<!-- ===================== 분석하기 끝 ===================== -->
 
 </body>
 </html>
