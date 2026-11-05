@@ -1250,14 +1250,16 @@ const seekTo = (t) => new Promise((res) => {
 //  - low : 보이는 발 점 중 가장 아래 점 → 이륙·착지 순간용 (바닥을 누르는 점, 어느 한 점이라도 먼저 닿으면 착지)
 const TOE_POINTS = [31, 32];
 function footY(pose) {
-  const none = { y: null, low: null, toe: null };
+  const none = { y: null, low: null, toe: null, lowL: null, lowR: null };
   if (!pose) return none;
   const seen = (p) => p && (p.visibility === undefined || p.visibility >= MIN_VIS);
   const pts = FOOT_POINTS.map((i) => pose[i]).filter(seen);
   if (pts.length < 2) return none;
   const toes = TOE_POINTS.map((i) => pose[i]).filter(seen);
   const avg = (a) => a.reduce((s, p) => s + p.y, 0) / a.length;
-  return { y: avg(pts), low: Math.max(...pts.map((p) => p.y)), toe: toes.length ? avg(toes) : avg(pts) };
+  // 발마다 보이는 점 중 가장 아래 점 (왼발 29·31, 오른발 30·32) → 착지는 두 발 모두 닿았을 때
+  const footLow = (ids) => { const q = ids.map((i) => pose[i]).filter(seen); return q.length ? Math.max(...q.map((p) => p.y)) : null; };
+  return { y: avg(pts), low: Math.max(...pts.map((p) => p.y)), toe: toes.length ? avg(toes) : avg(pts), lowL: footLow([29, 31]), lowR: footLow([30, 32]) };
 }
 
 // 1) 영상 전체를 한 프레임씩 넘기며 발 높이 기록
@@ -1267,8 +1269,8 @@ async function collect() {
   for (let t = 0; t <= dur + 1e-6 && !cancel; t += step) {
     await seekTo(Math.min(t, dur));
     const pose = kit.detectRaw();
-    const { y, low, toe } = footY(pose);
-    frames.push({ t: video.currentTime, y, low, toe });
+    const { y, low, toe, lowL, lowR } = footY(pose);
+    frames.push({ t: video.currentTime, y, low, toe, lowL, lowR });
     if (y !== null) drawFeet(pose);
     status.textContent = "분석 중… " + Math.min(100, Math.round((t / dur) * 100)) + "%";
   }
@@ -1356,68 +1358,79 @@ function findJump(frames) {
     takeoff = Math.min(t0, frames[a].t);
   }
 
-  // 착지 순간: 가장 높이 뜬 뒤, 발의 가장 아래 점이 바닥 가로선(y=0)에 닿는 첫 순간
-  // 선 근처(화면 높이의 1% 이내)로 내려오면 착지로 보되, 시각은 발이 선(y=0)에 닿는 순간으로 계산합니다.
-  // (조금 앞뒤로 떨어져 선보다 살짝 위에 착지해도 놓치지 않기 위한 여유)
-  const landT = Math.max(lineNoise * 3, 0.01);
+  // ---------- 착지 순간 ----------
+  // 왼발(29 뒤꿈치, 31 앞꿈치)과 오른발(30, 32)을 따로 봅니다. 한 발의 두 점 중 하나라도 그 발의 바닥선에 닿으면
+  // 그 발은 착지한 것이고, 두 발이 모두 착지한 순간(둘 중 늦은 쪽)에 카운트를 멈춥니다.
+  // 옆에서 찍으면 먼 쪽 발이 화면에서 조금 위에 보이므로, 바닥선(y=0)도 발마다 따로 잡습니다.
   let peakAt = best.s;
   for (let k = best.s; k <= best.e; k++) if (H[k] !== null && H[k] >= H[peakAt]) peakAt = k;
-  const touchT = Math.max(lineNoise * 2, 0.003);    // 이 안이면 "선에 실제로 닿음"
-  const prevValid = (k) => { let p = k - 1; while (p > peakAt && L[p] === null) p--; return p; };
-  // 공중 프레임 p에서 바닥 프레임 k 사이에 발이 y=0에 닿은 시각.
-  // 내려오던 속도(p 직전 프레임 → p)로 앞으로 그어서 찾습니다. 바닥 프레임은 이미 멈춰 있어서
-  // p와 k를 그냥 이으면 항상 k 쪽으로 쏠려 늦게 나오기 때문입니다. 결과는 p와 k 사이로 제한합니다.
-  const crossZero = (p, k) => {
-    if (L[p] === null || L[p] <= L[k]) return frames[k].t;
-    const q = p > peakAt ? prevValid(p) : -1;
-    if (q >= peakAt && L[q] !== null && L[q] > L[p] && L[p] > 0) {
-      const speed = (L[q] - L[p]) / (frames[p].t - frames[q].t);
-      return Math.min(frames[k].t, Math.max(frames[p].t, frames[p].t + L[p] / speed));
+
+  // 한 줄(S: 그 발이 바닥선보다 얼마나 위인지)에서 착지 순간을 찾습니다. 못 찾으면 null.
+  function landingOf(S, noiseS) {
+    const landT = Math.max(noiseS * 3, 0.01);        // 선 근처(화면 높이의 1% 이내)로 내려오면 착지 후보
+    const touchT = Math.max(noiseS * 2, 0.003);      // 이 안이면 "선에 실제로 닿음"
+    const prevValid = (k) => { let q = k - 1; while (q > peakAt && S[q] === null) q--; return q; };
+    // 공중 프레임 p와 바닥 프레임 k 사이에 발이 y=0에 닿은 시각: 내려오던 속도로 앞으로 그어서 찾음 (p와 k 사이로 제한)
+    const crossZero = (p, k) => {
+      if (p < 0 || S[p] === null || S[p] <= S[k]) return frames[k].t;
+      const q = p > peakAt ? prevValid(p) : -1;
+      if (q >= peakAt && S[q] !== null && S[q] > S[p] && S[p] > 0) {
+        const speed = (S[q] - S[p]) / (frames[p].t - frames[q].t);
+        return Math.min(frames[k].t, Math.max(frames[p].t, frames[p].t + S[p] / speed));
+      }
+      const u = Math.min(1, Math.max(0, S[p] / (S[p] - S[k])));
+      return frames[p].t + u * (frames[k].t - frames[p].t);
+    };
+    const air = S.slice(best.s, best.e + 1).filter((v) => v !== null);
+    if (!air.length) return null;
+    const peakS = Math.max(...air);
+
+    // 후보 ①: 발이 내려오다가 멈춘 순간 (뛴 자리와 다른 곳에 착지해 선까지 안 내려와도 잡힘)
+    //  - 가장 높은 곳에서 선까지 거리의 75% 이상 내려왔고, 0.03초 뒤에도 더 내려가지 않으면 그 프레임에서 바닥
+    const stopEps = Math.max(noiseS * 2, 0.003), STOP_WIN = 0.03;
+    let stopLanding = null;
+    for (let k = peakAt + 1; k + 1 < S.length; k++) {
+      if (S[k] === null || S[k] > peakS * 0.25) continue;
+      let m = k + 1;
+      while (m < S.length && (S[m] === null || frames[m].t < frames[k].t + STOP_WIN - 1e-6)) m++;
+      if (m >= S.length) break;
+      if (S[k] - S[m] > stopEps) continue;           // 아직 내려가는 중
+      stopLanding = frames[k].t;
+      const p = prevValid(k), q = p > peakAt ? prevValid(p) : -1;
+      if (p > peakAt && q >= peakAt && S[p] !== null && S[q] !== null && S[q] > S[p] && S[p] > S[k]) {
+        const speed = (S[q] - S[p]) / (frames[p].t - frames[q].t);
+        stopLanding = Math.min(frames[k].t, frames[p].t + (S[p] - S[k]) / speed);
+      }
+      break;
     }
-    const u = Math.min(1, Math.max(0, L[p] / (L[p] - L[k])));
-    return frames[p].t + u * (frames[k].t - frames[p].t);
-  };
+
+    // 후보 ②: 발의 아래 점이 바닥선에 닿은 순간 (선 근처로 내려온 뒤 0.1초 안에 실제로 닿는 프레임 기준)
+    let touchLanding = null;
+    for (let k = peakAt + 1; k < S.length; k++) {
+      if (S[k] === null || S[k] > landT) continue;
+      let m = k;
+      while (m < S.length && frames[m].t <= frames[k].t + 0.1 && !(S[m] !== null && S[m] <= touchT)) m++;
+      touchLanding = m < S.length && frames[m].t <= frames[k].t + 0.1 ? crossZero(prevValid(m), m) : crossZero(prevValid(k), k);
+      break;
+    }
+    // 두 후보 중 먼저 온 것 (둘 다 "이미 바닥"이라는 신호라서 빠른 쪽이 실제 착지에 가까움)
+    if (stopLanding !== null && (touchLanding === null || stopLanding < touchLanding)) return stopLanding;
+    return touchLanding;
+  }
+
+  // 발마다 바닥선과 "선보다 얼마나 위인지" 줄 만들기 (그 발이 보이는 프레임이 충분할 때만)
+  function footSeries(key) {
+    const vals = frames.filter((f) => f[key] !== null && f[key] !== undefined).map((f) => f[key]);
+    if (vals.length < 10) return null;
+    const { ground: g, noise: n } = findGround(vals);
+    return { S: frames.map((f) => (f[key] === null || f[key] === undefined ? null : g - f[key])), noise: n };
+  }
+  const feet = [footSeries("lowL"), footSeries("lowR")].filter(Boolean);
+  const perFoot = feet.map((f) => landingOf(f.S, f.noise)).filter((v) => v !== null);
   let landing = null;
-
-  // 착지 후보 ①: 발이 내려오다가 멈춘 순간 (뛴 자리와 다른 곳에 착지해 선까지 안 내려와도 잡힘)
-  //  - 가장 높은 곳에서 선까지 거리의 75% 이상 내려왔고
-  //  - 0.03초 뒤에도 더 내려가지 않으면(떨림 정도 이내) → 그 프레임에서 바닥에 닿은 것
-  //    (프레임 수와 상관없이 같은 시간 간격으로 봐서, 240fps에서 떨림을 멈춤으로 착각하지 않게)
-  const peakL = L[peakAt] !== null ? L[peakAt] : Math.max(...L.slice(best.s, best.e + 1).filter((v) => v !== null));
-  const stopEps = Math.max(lineNoise * 2, 0.003);
-  const STOP_WIN = 0.03;
-  let stopLanding = null;
-  for (let k = peakAt + 1; k + 1 < L.length; k++) {
-    if (L[k] === null) continue;
-    if (L[k] > peakL * 0.25) continue;                 // 아직 충분히 안 내려옴
-    let m = k + 1;
-    while (m < L.length && (L[m] === null || frames[m].t < frames[k].t + STOP_WIN - 1e-6)) m++;
-    if (m >= L.length) break;
-    if (L[k] - L[m] > stopEps) continue;               // 아직 내려가는 중
-    // 프레임 k에서 이미 바닥. 실제로 닿은 시각은 직전 프레임 p와 k 사이:
-    // p 직전의 내려오던 속도로 p에서 k의 높이까지 내려오는 데 걸리는 시간만큼 p 뒤 (k를 넘지 않게)
-    stopLanding = frames[k].t;
-    const p = prevValid(k), q = p > peakAt ? prevValid(p) : -1;
-    if (p > peakAt && q >= peakAt && L[p] !== null && L[q] !== null && L[q] > L[p] && L[p] > L[k]) {
-      const speed = (L[q] - L[p]) / (frames[p].t - frames[q].t);
-      stopLanding = Math.min(frames[k].t, frames[p].t + (L[p] - L[k]) / speed);
-    }
-    break;
-  }
-
-  // 착지 후보 ②: 발의 가장 아래 점이 바닥 가로선에 닿은 순간
-  for (let k = peakAt + 1; k < L.length; k++) {
-    if (L[k] === null || L[k] > landT) continue;
-    // ① 선 근처까지 내려옴 → ② 0.1초 안에 선에 실제로 닿는 프레임이 있으면 그 순간으로
-    let m = k;
-    while (m < L.length && frames[m].t <= frames[k].t + 0.1 && !(L[m] !== null && L[m] <= touchT)) m++;
-    if (m < L.length && frames[m].t <= frames[k].t + 0.1) landing = crossZero(prevValid(m), m);
-    else landing = crossZero(prevValid(k), k);       // 선보다 살짝 위에 착지한 경우
-    break;
-  }
-  // 두 후보 중 먼저 온 것을 착지로 (둘 다 "이미 바닥"이라는 신호라서, 빠른 쪽이 실제 착지에 가까움)
-  if (stopLanding !== null && (landing === null || stopLanding < landing)) landing = stopLanding;
-  if (landing === null) {                            // 둘 다 없으면: 예전 방식(평균 높이)으로
+  if (perFoot.length) landing = Math.max(...perFoot);            // 두 발 다 착지한 순간 (한 발만 보이면 그 발)
+  if (landing === null) landing = landingOf(L, lineNoise);       // 발을 나눠 볼 수 없으면 두 발 중 가장 아래 점으로
+  if (landing === null) {                                        // 그래도 없으면: 예전 방식(평균 높이)으로
     let b = best.e;
     while (b + 1 < H.length && H[b + 1] !== null && H[b + 1] > loT) b++;
     landing = b + 1 < H.length ? cross(b, b + 1) : frames[b].t;
