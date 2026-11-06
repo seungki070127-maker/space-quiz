@@ -166,6 +166,9 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px s
 @media (max-width: 820px) { .m-grid { grid-template-columns: 1fr; } }
 .vbox { position: relative; border-radius: 14px; overflow: hidden; background: #05090E; aspect-ratio: 9 / 12; max-height: 520px; max-width: 100%; display: grid; place-items: center; }
 .vbox video { width: 100%; height: 100%; object-fit: contain; }
+.vclose { position: absolute; top: 8px; right: 8px; z-index: 3; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font: 400 22px/1 var(--font-body); color: #F6F4EE; background: rgba(12, 20, 30, .72); border: 1px solid rgba(246, 244, 238, .35); cursor: pointer; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.vclose:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-soft); }
+.vclose:disabled { opacity: .35; cursor: not-allowed; }
 .vbox canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; background: #05090E; }
 #m-ai-status { margin-left: 0; }
 .vempty { display: grid; gap: 14px; justify-items: center; text-align: center; padding: 24px; color: var(--muted); }
@@ -356,7 +359,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       "사람을 찾지 못했어요. 몸 전체가 보이게 찍어 주세요": "No person found. Film with your whole body in view",
       "새 영상 · 재생하거나 프레임을 넘겨 보세요": "New video · play it or step through frames",
       "인식 준비 완료 · 재생하거나 프레임을 넘겨 보세요": "Ready · play the video or step through frames",
-      "자세 인식을 껐어요": "Pose tracking is off", "분석하기": "Analyze", "분석 중지": "Stop analysis", "체공 시간": "Air time",
+      "자세 인식을 껐어요": "Pose tracking is off", "영상 지우기": "Remove video", "분석하기": "Analyze", "분석 중지": "Stop analysis", "체공 시간": "Air time",
       "모델 준비 중…": "Preparing model…", "분석을 멈췄어요": "Analysis stopped",
       "발이 보이는 프레임이 너무 적어요. 발 전체가 나오게 옆에서 찍어 주세요": "Too few frames show your feet. Film from the side with your whole feet in view",
       "점프를 찾지 못했어요. 발이 잘 보이게 옆에서 찍었는지 확인해 주세요": "No jump found. Check that you filmed from the side with your feet clearly visible", "일시정지": "Pause", "끝까지 재생했어요": "Reached the end",
@@ -507,6 +510,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
           <video id="m-video" playsinline muted controls hidden></video>
           <canvas id="m-pose" aria-hidden="true"></canvas>
           <div class="ground-line" id="m-ground" aria-hidden="true" hidden><span>y = 0</span></div>
+          <button type="button" class="vclose" id="m-close" aria-label="영상 지우기" title="영상 지우기" hidden>×</button>
           <div class="vempty" id="m-empty">
             <svg class="cam-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L17 6h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="none" stroke="#FF7A33" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13" r="4" fill="none" stroke="#FF7A33" stroke-width="1.8"/></svg>
             <p>아직 찍은 영상이 없어요</p>
@@ -974,6 +978,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     video.hidden = false;
     empty.hidden = true;
     $("m-retake").hidden = false;
+    $("m-close").hidden = false;
     [back, fwd, offBtn, $("m-play")].forEach((b) => (b.disabled = false));
     onBtn.disabled = true;
     markOff = null;
@@ -982,6 +987,24 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
   };
   cam.addEventListener("change", onPick);
   $("gal").addEventListener("change", onPick);
+
+  // × 버튼: 영상을 지우고 처음 화면(카메라 열기 / 갤러리에서 고르기)으로. 다른 영상을 바로 넣을 수 있게
+  $("m-close").addEventListener("click", () => {
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+    if (url) { URL.revokeObjectURL(url); url = null; }
+    video.hidden = true;
+    empty.hidden = false;
+    $("m-retake").hidden = true;
+    $("m-close").hidden = true;
+    [back, fwd, offBtn, onBtn, $("m-play")].forEach((b) => (b.disabled = true));
+    markOff = null;
+    offBtn.textContent = "발 떨어짐 표시";
+    onBtn.textContent = "착지 표시";
+    cam.value = ""; $("gal").value = "";
+    video.dispatchEvent(new Event("cleared"));     // 자세 인식·분석 쪽도 정리하라고 알림
+  });
 
   // 오른쪽 영상 시각 표시: 신호(seeked)가 빠져도 멈추지 않게 화면을 그릴 때마다 직접 읽어 갱신
   const timeEl = $("m-time");
@@ -1161,6 +1184,12 @@ function togglePlay() { stepping ? stopStepping() : startStepping(); }
 const playBtn = document.getElementById("m-play");
 playBtn.addEventListener("click", () => { if (on) togglePlay(); });
 
+// × 로 영상을 지우면 자세 인식을 끄고 처음 안내 문구로
+video.addEventListener("cleared", () => {
+  stop("영상을 넣으면 MediaPipe로 관절을 찾아요");
+  btn.disabled = true;
+});
+
 function stop(msg) {
   on = false; clear(); stopStepping(); delete video.dataset.pose;
   canvas.hidden = true; video.controls = true;
@@ -1207,6 +1236,9 @@ window.AISargentPose = {
   load,
   isOn: () => on,
   stopPlayback: () => stopStepping(),
+  // 이전 영상·이전 프레임의 추적 상태를 지움 (모델 처리 과정을 새로 만듦).
+  // 분석할 때마다 부르면 같은 영상은 몇 번째로 분석하든, 자세 인식을 켰든 껐든 같은 결과가 나옵니다.
+  reset: async () => { if (landmarker) { await landmarker.setOptions({ runningMode: "VIDEO" }); ts = 0; lastTime = -1; resetSmooth(); } },
   suspend: (v) => { suspended = v; if (!v && on) { lastTime = -1; resetSmooth(); try { detect(true); } catch (e) {} } },
   // 지금 영상 프레임을 캔버스에 그리고, 다듬지 않은 관절 33개를 돌려줍니다 (사람이 없으면 null)
   detectRaw() {
@@ -1525,11 +1557,13 @@ btn.addEventListener("click", async () => {
   // 타이머가 이전 결과(이전 이륙·착지 시각)로 올라가다 멈추고, 이전 바닥선도 그대로 남아 보입니다.
   result = null; live = null; placeLine(); updateTimer();
   btn.textContent = "분석 중지"; aiBtn.disabled = true;
+  $("m-close").disabled = true;   // 분석 중에 영상을 지우면 분석이 멈추지 못해서 잠깐 막음
   kit.stopPlayback(); video.pause();
   const canvas = kit.canvas, wasControls = video.controls;
   try {
     status.textContent = "모델 준비 중…";
     await kit.load();
+    await kit.reset();      // 이전 영상의 추적 상태가 섞이지 않게
     kit.suspend(true);
     canvas.hidden = false; video.controls = false;
     const frames = await collect();
@@ -1555,12 +1589,15 @@ btn.addEventListener("click", async () => {
     status.textContent = resultMsg;
     if (!kit.isOn()) { canvas.hidden = true; video.controls = wasControls || true; }
     running = false; btn.textContent = "분석하기"; aiBtn.disabled = false;
+    $("m-close").disabled = false;
     live = null; placeLine(); updateTimer();
   }
 });
 
 // 새 영상이 들어오면 이전 결과를 지우고 버튼을 켭니다
 video.addEventListener("loadeddata", () => { result = null; btn.disabled = false; updateTimer(); placeLine(); });
+// × 로 영상을 지우면 이전 결과 표시(바닥선·카운트)를 지우고 분석하기 버튼을 끕니다
+video.addEventListener("cleared", () => { clearTimeout(showTimer); result = null; live = null; btn.disabled = true; placeLine(); updateTimer(); });
 </script>
 <!-- ===================== 분석하기 끝 ===================== -->
 
