@@ -176,6 +176,8 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px s
 /* 측정 */
 .cam-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 #upload { scroll-margin-top: calc(84px + env(safe-area-inset-top, 0px)); }
+.lj-grid { max-width: 560px; }
+#lj-ai-status { margin-left: 0; }
 .m-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 20px; }
 @media (max-width: 820px) { .m-grid { grid-template-columns: 1fr; } }
 .vbox { position: relative; border-radius: 14px; overflow: hidden; background: #05090E; aspect-ratio: 9 / 12; max-height: 520px; max-width: 100%; display: grid; place-items: center; }
@@ -322,6 +324,8 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       "운동 방향 제시": "Training plan", "망설임 없이": "No hesitation",
       "카메라로 찍고": "Film it,",
       "영상촬영 가이드 라인": "Filming guidelines",
+      "제자리멀리뛰기 측정": "Standing long jump", "옆에서 찍고": "Film from the side,", "자세를 본다": "check your form",
+      "출발부터 착지까지 화면 안에 나오게 하세요.": "Keep the whole jump, from takeoff to landing, in the frame.",
       "폰을 고정한 상태로 영상을 찍으세요.": "Keep your phone fixed in place while filming.",
       "발이 잘 보일 수 있게 찍으세요.": "Make sure your feet are clearly visible.",
       "되도록 측면 수평에서 촬영할 수 있게 하세요.": "If possible, film from the side at a level angle.",
@@ -571,6 +575,64 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
         <div class="m-dir">
           <p class="kicker" id="m-level">운동 방향</p>
           <p class="muted" id="m-dir">측정이 끝나면 기록에 맞는 운동을 알려 드려요.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="lj-measure" aria-labelledby="lj-title">
+  <div class="wrap">
+    <div class="head">
+      <p class="kicker">제자리멀리뛰기 측정</p>
+      <h2 class="display" id="lj-title">옆에서 찍고<br>자세를 본다</h2>
+      <div class="guide">
+        <h3>영상촬영 가이드 라인</h3>
+        <ul>
+          <li>폰을 고정한 상태로 영상을 찍으세요.</li>
+          <li>발이 잘 보일 수 있게 찍으세요.</li>
+          <li>되도록 측면 수평에서 촬영할 수 있게 하세요.</li>
+          <li>몸 전체가 나올 수 있게 하세요.</li>
+          <li>출발부터 착지까지 화면 안에 나오게 하세요.</li>
+        </ul>
+      </div>
+    </div>
+    <input type="file" id="lj-cam" class="cam-input" accept="video/*" capture="environment" tabindex="-1" aria-hidden="true">
+    <input type="file" id="lj-gal" class="cam-input" accept="video/*" tabindex="-1" aria-hidden="true">
+    <div class="lj-grid">
+      <div class="card">
+        <div class="vbox">
+          <video id="lj-video" playsinline muted controls hidden></video>
+          <canvas id="lj-pose" aria-hidden="true" hidden></canvas>
+          <button type="button" class="vclose" id="lj-close" aria-label="영상 지우기" title="영상 지우기" hidden>×</button>
+          <div class="vempty" id="lj-empty">
+            <svg class="cam-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8a2 2 0 0 1 2-2h2l1.5-2h7L17 6h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="none" stroke="#FF7A33" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13" r="4" fill="none" stroke="#FF7A33" stroke-width="1.8"/></svg>
+            <p>아직 찍은 영상이 없어요</p>
+            <label for="lj-cam" class="btn primary" data-lj-pick role="button" tabindex="0">카메라 열기</label>
+            <label for="lj-gal" class="btn small" data-lj-pick role="button" tabindex="0">갤러리에서 영상 고르기</label>
+          </div>
+        </div>
+        <div class="m-ctl">
+          <button type="button" class="ctl mark" id="lj-ai" disabled aria-pressed="false">자세 인식 켜기</button>
+          <span class="readout" id="lj-ai-status" role="status">영상을 넣으면 MediaPipe로 관절을 찾아요</span>
+        </div>
+        <div class="m-ctl" aria-label="영상 프레임 이동">
+          <button type="button" class="ctl" id="lj-play" disabled>재생/정지</button>
+          <button type="button" class="ctl" id="lj-back" disabled aria-label="한 프레임 뒤로">◀ 1프레임</button>
+          <button type="button" class="ctl" id="lj-fwd" disabled aria-label="한 프레임 앞으로">1프레임 ▶</button>
+          <span class="readout" id="lj-time">0.000초</span>
+        </div>
+        <div class="m-ctl">
+          <label for="lj-cam" class="ctl" id="lj-retake" data-lj-pick role="button" tabindex="0" hidden>다시 찍기</label>
+        </div>
+        <div class="m-field">
+          <label for="lj-fps">영상 프레임 수</label>
+          <select id="lj-fps">
+            <option value="30">30fps (일반)</option>
+            <option value="60">60fps</option>
+            <option value="120">120fps (슬로모션)</option>
+            <option value="240">240fps (슬로모션)</option>
+          </select>
         </div>
       </div>
     </div>
@@ -1080,6 +1142,7 @@ const $ = (id) => document.getElementById(id);
 const video = $("m-video"), canvas = $("m-pose"), btn = $("m-ai"), status = $("m-ai-status");
 const ctx = canvas.getContext("2d");
 const abs = (p) => new URL(p, document.baseURI).href;
+let makeLM = null;   // 같은 모델로 추적기를 하나 더 만드는 함수 (제자리멀리뛰기용)
 let mp = null, landmarker = null, drawer = null, loading = null, on = false, lastTime = -1, ts = 0;
 
 async function load() {
@@ -1099,6 +1162,7 @@ async function load() {
       runningMode: "VIDEO", numPoses: 1,
       minPoseDetectionConfidence: 0.5, minPosePresenceConfidence: 0.6, minTrackingConfidence: 0.6
     });
+    makeLM = make;
     try { landmarker = await make("GPU"); } catch (e) { landmarker = await make("CPU"); }
     drawer = new mp.DrawingUtils(ctx);
     return landmarker;
@@ -1250,6 +1314,14 @@ window.AISargentPose = {
   load,
   isOn: () => on,
   stopPlayback: () => stopStepping(),
+  // 제자리멀리뛰기 칸용: 이미 받은 모델로 따로 쓰는 추적기를 만듦 (모델을 두 번 받지 않음, 서전트 쪽과 섞이지 않음)
+  createLandmarker: async () => {
+    const before = status.textContent;
+    await load();
+    status.textContent = before;                     // 서전트 칸 안내 문구는 그대로 둠
+    try { return await makeLM("GPU"); } catch (e) { return makeLM("CPU"); }
+  },
+  connections: () => mp.PoseLandmarker.POSE_CONNECTIONS,
   // 이전 영상·이전 프레임의 추적 상태를 지움 (모델 처리 과정을 새로 만듦).
   // 분석할 때마다 부르면 같은 영상은 몇 번째로 분석하든, 자세 인식을 켰든 껐든 같은 결과가 나옵니다.
   reset: async () => { if (landmarker) { await landmarker.setOptions({ runningMode: "VIDEO" }); ts = 0; lastTime = -1; resetSmooth(); } },
@@ -1606,6 +1678,164 @@ video.addEventListener("loadeddata", () => { result = null; btn.disabled = false
 video.addEventListener("cleared", () => { clearTimeout(showTimer); result = null; live = null; btn.disabled = true; placeLine(); updateTimer(); });
 </script>
 <!-- ===================== 분석하기 끝 ===================== -->
+<!-- =====================================================================
+     제자리멀리뛰기 : 촬영·재생·자세 인식 (여기부터 제자리멀리뛰기 전용 코드)
+     - 서전트 칸과 같은 방식(카메라/갤러리, ×, 재생, 1프레임 이동, 프레임 수, 자세 인식)
+     - 분석하기·기록 계산은 아직 없음
+     ===================================================================== -->
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const video = $("lj-video"), canvas = $("lj-pose"), ctx = canvas.getContext("2d"), empty = $("lj-empty");
+const status = $("lj-ai-status"), aiBtn = $("lj-ai"), playBtn = $("lj-play"), back = $("lj-back"), fwd = $("lj-fwd");
+const closeBtn = $("lj-close"), retake = $("lj-retake"), timeEl = $("lj-time");
+const INITIAL = "영상을 넣으면 MediaPipe로 관절을 찾아요";
+let url = null, lm = null, on = false, stepping = false, ts = 0, conns = null;
+const fps = () => parseInt($("lj-fps").value, 10) || 30;
+
+// 영상 고르기 버튼(label): 같은 파일도 다시 고를 수 있게 비우고, 키보드(Enter/Space)로도 열리게
+document.querySelectorAll("[data-lj-pick]").forEach((b) => {
+  const input = $(b.getAttribute("for"));
+  b.addEventListener("click", () => { input.value = ""; });
+  b.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.value = ""; input.click(); } });
+});
+
+function setLoaded(loaded) {
+  video.hidden = !loaded; empty.hidden = loaded; closeBtn.hidden = !loaded; retake.hidden = !loaded;
+  [aiBtn, playBtn, back, fwd].forEach((b) => (b.disabled = !loaded));
+  status.textContent = INITIAL;
+}
+async function pick(e) {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  stopPose();
+  if (url) URL.revokeObjectURL(url);
+  url = URL.createObjectURL(f);
+  video.src = url;
+  setLoaded(true);
+  if (lm) { await lm.setOptions({ runningMode: "VIDEO" }); ts = 0; resetSmooth(); }   // 이전 영상 추적 상태 지움
+}
+$("lj-cam").addEventListener("change", pick);
+$("lj-gal").addEventListener("change", pick);
+
+// × : 영상을 지우고 처음 화면으로
+closeBtn.addEventListener("click", () => {
+  stopPose();
+  video.pause(); video.removeAttribute("src"); video.load();
+  if (url) { URL.revokeObjectURL(url); url = null; }
+  setLoaded(false);
+});
+
+// 오른쪽 영상 시각: 화면을 그릴 때마다 직접 읽음
+(function tick() {
+  const t = video.currentTime.toFixed(3) + "초";
+  if (timeEl.dataset.v !== t) { timeEl.dataset.v = t; timeEl.textContent = t; }
+  requestAnimationFrame(tick);
+})();
+
+// 1프레임 이동
+function step(dir) {
+  stopStepping(); video.pause();
+  video.currentTime = Math.min(video.duration || Infinity, Math.max(0, video.currentTime + dir / fps()));
+}
+back.addEventListener("click", () => step(-1));
+fwd.addEventListener("click", () => step(1));
+
+// 재생: 자세 인식이 꺼져 있으면 보통 재생, 켜져 있으면 한 프레임씩 넘기며 매 프레임 관절 표시
+playBtn.addEventListener("click", () => { if (on) (stepping ? stopStepping() : startStepping()); else (video.paused ? video.play().catch(() => {}) : video.pause()); });
+video.addEventListener("click", () => { if (on) (stepping ? stopStepping() : startStepping()); });
+video.addEventListener("play", () => { if (on) { video.pause(); if (!stepping) startStepping(); } });
+function startStepping() {
+  if (video.duration && video.currentTime >= video.duration - 1 / fps()) video.currentTime = 0;
+  stepping = true; playBtn.textContent = "일시정지"; nextStep();
+}
+function stopStepping(msg) { stepping = false; playBtn.textContent = "재생/정지"; if (msg) status.textContent = msg; }
+function nextStep() {
+  if (!stepping || !on) return;
+  const t = video.currentTime + 1 / fps();
+  if (!video.duration || t > video.duration) { stopStepping("끝까지 재생했어요"); return; }
+  video.currentTime = t;
+}
+video.addEventListener("seeked", () => {
+  if (!on) return;
+  try { detect(); } catch (e) { stopPose("인식 중 오류가 났어요: " + e.message); return; }
+  if (stepping) requestAnimationFrame(nextStep);
+});
+
+// 흔들림 줄이기 (서전트 칸과 같은 One Euro Filter 설정)
+const SM = { minCutoff: 0.7, beta: 40, dCutoff: 1.0 };
+const alpha = (c, dt) => { const r = 2 * Math.PI * c * dt; return r / (r + 1); };
+class OneEuro {
+  constructor() { this.x = null; this.dx = 0; }
+  filter(v, dt) {
+    if (this.x === null) { this.x = v; return v; }
+    const dx = (v - this.x) / dt;
+    this.dx += alpha(SM.dCutoff, dt) * (dx - this.dx);
+    this.x += alpha(SM.minCutoff + SM.beta * Math.abs(this.dx), dt) * (v - this.x);
+    return this.x;
+  }
+}
+let filters = null, prevT = null;
+function resetSmooth() { filters = null; prevT = null; }
+function smooth(points, t) {
+  const dt = prevT === null ? 0 : t - prevT;
+  if (!filters || dt <= 0 || dt > 0.5) {
+    filters = points.map(() => [new OneEuro(), new OneEuro()]);
+    filters.forEach(([fx, fy], i) => { fx.filter(points[i].x, 1); fy.filter(points[i].y, 1); });
+    prevT = t; return points;
+  }
+  prevT = t;
+  return points.map((q, i) => ({ ...q, x: filters[i][0].filter(q.x, dt), y: filters[i][1].filter(q.y, dt) }));
+}
+
+// 지금 프레임을 그리고 그 위에 관절 표시 (잘 안 보이는 관절은 그리지 않음)
+function detect() {
+  const w = video.videoWidth, h = video.videoHeight;
+  if (!w || !h || !lm) return;
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  ctx.drawImage(video, 0, 0, w, h);
+  ts = Math.max(ts + 1, performance.now());
+  const res = lm.detectForVideo(canvas, ts);
+  const raw = res.landmarks && res.landmarks[0];
+  if (!raw) { resetSmooth(); status.textContent = "사람을 찾지 못했어요. 몸 전체가 보이게 찍어 주세요"; return; }
+  const pose = smooth(raw, video.currentTime);
+  const s = Math.max(2, w / 360), ok = (q) => q && (q.visibility === undefined || q.visibility >= 0.5);
+  ctx.lineCap = "round"; ctx.strokeStyle = "#FF7A33"; ctx.lineWidth = s * 1.6; ctx.beginPath();
+  conns.forEach(({ start, end }) => { const a = pose[start], b = pose[end]; if (!ok(a) || !ok(b)) return; ctx.moveTo(a.x * w, a.y * h); ctx.lineTo(b.x * w, b.y * h); });
+  ctx.stroke();
+  ctx.fillStyle = "#FF7A33"; ctx.strokeStyle = "#F6F4EE"; ctx.lineWidth = s * 0.6;
+  pose.forEach((q) => { if (!ok(q)) return; ctx.beginPath(); ctx.arc(q.x * w, q.y * h, s * 1.4, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); });
+  status.textContent = "인식 중 · 관절 " + pose.length + "개 · " + video.currentTime.toFixed(3) + "초";
+}
+
+function stopPose(msg) {
+  on = false; stopStepping();
+  canvas.hidden = true; ctx.clearRect(0, 0, canvas.width, canvas.height);
+  video.controls = true;
+  aiBtn.textContent = "자세 인식 켜기"; aiBtn.setAttribute("aria-pressed", "false");
+  if (msg) status.textContent = msg;
+}
+aiBtn.addEventListener("click", async () => {
+  if (on) { stopPose("자세 인식을 껐어요"); return; }
+  aiBtn.disabled = true;
+  try {
+    if (!lm) {
+      status.textContent = "모델 불러오는 중… (처음 한 번, 약 22MB)";
+      lm = await window.AISargentPose.createLandmarker();
+      conns = window.AISargentPose.connections();
+    }
+    video.pause();
+    on = true; resetSmooth();
+    canvas.hidden = false; video.controls = false;
+    aiBtn.textContent = "자세 인식 끄기"; aiBtn.setAttribute("aria-pressed", "true");
+    status.textContent = "인식 준비 완료 · 재생하거나 프레임을 넘겨 보세요";
+    detect();
+  } catch (e) {
+    console.error(e);
+    status.textContent = "이 화면에서는 모델을 실행하지 못했어요 (" + (e && e.message ? e.message : e) + ")";
+  } finally { aiBtn.disabled = false; }
+});
+</script>
+<!-- ===================== 제자리멀리뛰기 끝 ===================== -->
 
 </body>
 </html>
