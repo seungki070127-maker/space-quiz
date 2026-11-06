@@ -147,6 +147,20 @@ section.block .wrap { display: flex; flex-direction: column; gap: 40px; padding-
 .compare td:first-child { font-weight: 800; width: 18%; }
 .compare td.old { color: var(--muted); }
 .compare td.ours { font-weight: 700; background: rgba(255, 122, 51, .08); }
+/* 휴대폰: 표가 옆으로 잘려 "AI SARGENT" 칸(제자리멀리뛰기 자세 분석 등)이 안 보이던 문제 → 항목마다 카드로 세로 배치 */
+@media (max-width: 640px) {
+  .table-scroll { overflow: visible; border: 0; }
+  .compare, .compare tbody, .compare tr, .compare td { display: block; width: 100%; }
+  .compare { min-width: 0; }
+  .compare thead { display: none; }
+  .compare tr { border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; margin-bottom: 12px; background: var(--bg); }
+  .compare tr:last-child { margin-bottom: 0; }
+  .compare td { padding: 4px 0; border: 0; }
+  .compare td:first-child { width: auto; font-size: 18px; padding-bottom: 8px; }
+  .compare td.ours { background: transparent; color: var(--accent-soft); }
+  .compare td.old::before, .compare td.ours::before { content: attr(data-label) " · "; font-size: 13px; font-weight: 800; letter-spacing: .04em; color: var(--muted); }
+  .compare td.ours::before { color: var(--accent); }
+}
 
 /* 마지막 행동 유도 */
 .final { position: relative; overflow: hidden; text-align: center; border-top: 1px solid var(--line); }
@@ -394,7 +408,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       for (const [re, f] of RULES) { const m = k.match(re); if (m) return f(m); }
       return null;
     };
-    const ATTRS = ["aria-label", "placeholder", "title"];
+    const ATTRS = ["aria-label", "placeholder", "title", "data-label"];
     const done = new Set();   // 번역한 글자 조각 [node, ko, en]
     const doneAttr = [];      // [element, attr, ko]
     let lang = "ko", observer = null;
@@ -684,9 +698,9 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       <table class="compare">
         <thead><tr><th>구분</th><th>지금까지</th><th class="ours">AI SARGENT</th></tr></thead>
         <tbody>
-          <tr><td>측정</td><td class="old">비싼 기기가 필요하다</td><td class="ours">휴대폰 하나로 측정</td></tr>
-          <tr><td>자세</td><td class="old">혼자서는 확인하기 어렵다</td><td class="ours">제자리멀리뛰기 자세 분석</td></tr>
-          <tr><td>운동</td><td class="old">어떻게 할지 물어보기 어렵다</td><td class="ours">운동 방향을 바로 제시</td></tr>
+          <tr><td>측정</td><td class="old" data-label="지금까지">비싼 기기가 필요하다</td><td class="ours" data-label="AI SARGENT">휴대폰 하나로 측정</td></tr>
+          <tr><td>자세</td><td class="old" data-label="지금까지">혼자서는 확인하기 어렵다</td><td class="ours" data-label="AI SARGENT">제자리멀리뛰기 자세 분석</td></tr>
+          <tr><td>운동</td><td class="old" data-label="지금까지">어떻게 할지 물어보기 어렵다</td><td class="ours" data-label="AI SARGENT">운동 방향을 바로 제시</td></tr>
         </tbody>
       </table>
     </div>
