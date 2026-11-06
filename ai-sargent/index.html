@@ -1464,42 +1464,33 @@ function findJump(frames) {
   }
   const feet = [footSeries("lowL"), footSeries("lowR")].filter(Boolean);
   const perFoot = feet.map((f) => landingOf(f.S, f.noise)).filter((v) => v !== null);
-  let landing = null;
+  let landing = null, landedBy = "feet";
   if (perFoot.length) landing = Math.max(...perFoot);            // 두 발 다 착지한 순간 (한 발만 보이면 그 발)
-  if (landing === null) landing = landingOf(L, lineNoise);       // 발을 나눠 볼 수 없으면 두 발 중 가장 아래 점으로
+  if (landing === null) { landing = landingOf(L, lineNoise); landedBy = "low"; }   // 발을 나눠 볼 수 없으면 가장 아래 점으로
   if (landing === null) {                                        // 그래도 없으면: 예전 방식(평균 높이)으로
+    landedBy = "fallback";
     let b = best.e;
     while (b + 1 < H.length && H[b + 1] !== null && H[b + 1] > loT) b++;
     landing = b + 1 < H.length ? cross(b, b + 1) : frames[b].t;
   }
-  return { takeoff, landing, flight: landing - takeoff, ground, noise, line };
+  return { takeoff, landing, flight: landing - takeoff, ground, noise, line, landedBy };
 }
 
-// ---------- 분석 중 미리보기 ----------
-// 지금까지 분석한 프레임만으로 바닥선(y=0)을 잡아 바로 보여 주고, 발이 그 선을 떠나면 카운트를 시작해
-// 두 발이 모두 선으로 돌아오면 멈춥니다. 화면 표시용이라 최종 기록에는 영향이 없고,
-// 분석이 끝나면 영상 전체로 계산한 최종 결과로 바뀝니다(미리보기와 조금 다를 수 있음).
+// ---------- 분석 중 실시간 카운트 ----------
+// 지금까지 분석한 프레임에 최종 결과와 똑같은 정밀 계산(findJump)을 적용해 바닥선과 카운트를 보여 줍니다.
+// 마지막 프레임까지 분석하면 최종 결과와 같은 계산을 같은 프레임에 한 것이 되어, 마지막 카운트 = 결과가 됩니다.
+// (박승기 님 결정, 2026-11-06: 실시간 카운트와 결과를 같게 하되 정밀 계산의 정확도는 유지)
 function liveUpdate(frames) {
-  const vals = (key) => frames.filter((f) => f[key] !== null && f[key] !== undefined).map((f) => f[key]);
-  const lows = vals("low");
+  const lows = frames.filter((f) => f.low !== null).map((f) => f.low);
   if (lows.length < 8) return;                       // 바닥을 잡기엔 아직 프레임이 적음
-  if (!live) live = { line: 0, lineL: null, lineR: null, noise: 0, takeoff: null, landing: null };
-  if (live.takeoff === null) {                       // 뜨기 전까지만 바닥선을 다듬음 (발마다 따로도)
-    const g = findGround(lows); live.line = g.ground; live.noise = g.noise;
-    const L = vals("lowL"), R = vals("lowR");
-    live.lineL = L.length >= 8 ? findGround(L) : null;
-    live.lineR = R.length >= 8 ? findGround(R) : null;
-  }
-  const f = frames[frames.length - 1];
-  if (f.low === null) { placeLine(); return; }
-  if (live.takeoff === null) {
-    if (live.line - f.low > Math.max(live.noise * 4, 0.012)) live.takeoff = f.t;   // 가장 아래 점까지 떠오름 = 이륙
-  } else if (live.landing === null && f.t - live.takeoff > 0.1) {
-    // 발마다 자기 바닥선 근처로 돌아왔는지 (옆에서 찍으면 먼 쪽 발이 화면에서 조금 위에 있어서 선을 따로 씀)
-    const down = (g, v) => g && v !== null && v !== undefined && g.ground - v <= Math.max(g.noise * 3, 0.01);
-    const feetSeen = [[live.lineL, f.lowL], [live.lineR, f.lowR]].filter(([g, v]) => g && v !== null && v !== undefined);
-    const landed = feetSeen.length ? feetSeen.every(([g, v]) => down(g, v)) : live.line - f.low <= Math.max(live.noise * 3, 0.01);
-    if (landed) live.landing = f.t;                  // 두 발 모두 선으로 = 착지
+  if (!live) live = { line: 0, takeoff: null, landing: null };
+  const r = findJump(frames);
+  if (r.error) {                                     // 아직 점프 전: 바닥선만
+    live.line = findGround(lows).ground; live.takeoff = null; live.landing = null;
+  } else {
+    live.line = r.line; live.takeoff = r.takeoff; live.landing = r.landing;
+    // 아직 착지를 못 찾았으면(마지막 대비책 값) 착지는 정해지지 않은 것으로 보고 계속 셉니다
+    if (r.landedBy === "fallback") live.landing = null;
   }
   placeLine();
 }
@@ -1568,14 +1559,9 @@ btn.addEventListener("click", async () => {
     canvas.hidden = false; video.controls = false;
     const frames = await collect();
     if (cancel) { status.textContent = "분석을 멈췄어요"; return; }
-    const full = findJump(frames);
-    if (full.error) { result = null; status.textContent = full.error; return; }
-    // 결과는 분석 중에 보인 실시간 카운트(미리보기)와 같은 값으로 정합니다 (박승기 님 선택, 2026-11-06).
-    // 단, 실시간 카운트가 진짜 점프와 겹치지 않는 다른 움직임(점프 전 작은 뜀 등)을 잡았거나
-    // 착지를 못 잡았으면, 영상 전체로 계산한 값(full)을 씁니다.
-    const L = live;
-    const liveOk = L && L.takeoff !== null && L.landing !== null && L.takeoff < full.landing && L.landing > full.takeoff;
-    const r = liveOk ? { takeoff: L.takeoff, landing: L.landing, flight: L.landing - L.takeoff, line: L.line } : full;
+    // 결과 = 영상 전체 정밀 계산. 분석 중 실시간 카운트도 같은 계산을 쓰므로 마지막 카운트 값과 항상 같습니다.
+    const r = findJump(frames);
+    if (r.error) { result = null; status.textContent = r.error; return; }
     result = r; live = null;
     placeLine();
     status.textContent = "분석 완료 · 이륙 " + r.takeoff.toFixed(3) + "초 · 착지 " + r.landing.toFixed(3) + "초 · 체공 " + r.flight.toFixed(3) + "초";
