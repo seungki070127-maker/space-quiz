@@ -1568,8 +1568,14 @@ btn.addEventListener("click", async () => {
     canvas.hidden = false; video.controls = false;
     const frames = await collect();
     if (cancel) { status.textContent = "분석을 멈췄어요"; return; }
-    const r = findJump(frames);
-    if (r.error) { result = null; status.textContent = r.error; return; }
+    const full = findJump(frames);
+    if (full.error) { result = null; status.textContent = full.error; return; }
+    // 결과는 분석 중에 보인 실시간 카운트(미리보기)와 같은 값으로 정합니다 (박승기 님 선택, 2026-11-06).
+    // 단, 실시간 카운트가 진짜 점프와 겹치지 않는 다른 움직임(점프 전 작은 뜀 등)을 잡았거나
+    // 착지를 못 잡았으면, 영상 전체로 계산한 값(full)을 씁니다.
+    const L = live;
+    const liveOk = L && L.takeoff !== null && L.landing !== null && L.takeoff < full.landing && L.landing > full.takeoff;
+    const r = liveOk ? { takeoff: L.takeoff, landing: L.landing, flight: L.landing - L.takeoff, line: L.line } : full;
     result = r; live = null;
     placeLine();
     status.textContent = "분석 완료 · 이륙 " + r.takeoff.toFixed(3) + "초 · 착지 " + r.landing.toFixed(3) + "초 · 체공 " + r.flight.toFixed(3) + "초";
