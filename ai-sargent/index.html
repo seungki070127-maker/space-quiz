@@ -46,6 +46,38 @@ a { color: inherit; }
 /* 상단 바 */
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
 .nav { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 9; background: rgba(12, 20, 30, .82); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid rgba(38, 56, 77, .6); }
+.nav-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.menu-btn { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--fg); cursor: pointer; }
+.menu-btn svg { width: 22px; height: 22px; }
+.menu-btn:hover { border-color: var(--accent); }
+.menu-btn:focus-visible, .drawer button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+/* 더보기 메뉴: 사진처럼 위는 어두운 프로필, 아래는 흰 목록. 왼쪽에서 밀려 나옴 */
+.drawer { position: fixed; inset: 0 auto 0 0; margin: 0; padding: 0; border: 0; width: min(320px, 86vw); height: 100%; max-height: 100%; background: #FFFFFF; color: #14202E; overflow-y: auto; box-shadow: 12px 0 40px -12px rgba(0, 0, 0, .6); }
+.drawer::backdrop { background: rgba(5, 9, 14, .62); }
+.drawer[open] { animation: drawer-in .34s cubic-bezier(.32, .72, 0, 1); }
+@keyframes drawer-in { from { transform: translateX(-100%); } }
+.drawer-head { position: relative; background: #1E2733; color: #F6F4EE; display: grid; justify-items: center; gap: 12px; padding: calc(36px + env(safe-area-inset-top, 0px)) 20px 26px; }
+.drawer-close { position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); right: 10px; width: 36px; height: 36px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, .1); color: #F6F4EE; font: 400 22px/1 var(--font-body); cursor: pointer; }
+.drawer-avatar { width: 76px; height: 76px; border-radius: 50%; background: #C9CDD3; display: grid; place-items: end center; overflow: hidden; }
+.drawer-avatar svg { width: 64px; height: 64px; }
+.drawer-name { display: flex; align-items: center; gap: 6px; font-size: 17px; font-weight: 700; }
+.drawer-name .chev { color: #8D97A3; }
+.drawer .soon { flex: none; font-size: 11px; font-weight: 800; letter-spacing: .02em; padding: 3px 8px; border-radius: 99px; background: #FFE9DB; color: #B4410F; white-space: nowrap; }
+.drawer-head .soon { background: rgba(255, 122, 51, .2); color: #FFB385; }
+.drawer-quick { display: grid; grid-template-columns: repeat(3, 1fr); padding: 20px 6px 18px; border-bottom: 8px solid #F1F2F4; }
+.dq { display: grid; justify-items: center; gap: 8px; padding: 6px 0; border: 0; background: none; font: 600 14px var(--font-body); color: #3A4553; cursor: default; }
+.dq-icon { position: relative; color: #2A3442; }
+.dq-icon svg { width: 34px; height: 34px; display: block; }
+.dq { padding-top: 14px; }
+.dq-icon .soon { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 9.5px; padding: 2px 6px; }
+.drawer-list { list-style: none; margin: 0; padding: 6px 0; border-bottom: 8px solid #F1F2F4; }
+.drawer-list:last-of-type { border-bottom: 0; }
+.drawer-list button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 22px; border: 0; background: none; text-align: left; font: 500 16px var(--font-body); color: #8A93A0; cursor: default; }
+@media (prefers-reduced-motion: reduce) { .drawer[open] { animation: none; } }
+@media (max-width: 420px) { .menu-btn { width: 36px; height: 36px; } .nav-left { gap: 8px; } }
+/* 좁은 휴대폰: 로고와 버튼이 겹치지 않게 조금씩 줄임 */
+@media (max-width: 380px) { .nav .wrap { gap: 8px; } .nav .wrap .logo { font-size: 17px; } .nav-right .btn.small { padding: 0 10px; font-size: 13px; min-height: 36px; } .menu-btn { width: 34px; height: 34px; } }
+@media (max-width: 340px) { .nav .wrap .logo { font-size: 14px; } .nav-left { gap: 6px; } .nav-right { gap: 4px; } .nav-right .btn.small { padding: 0 8px; font-size: 12px; min-height: 34px; } .menu-btn { width: 32px; height: 32px; } }
 .nav .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 14px; }
 .logo { font-family: var(--font-display); font-size: 22px; text-decoration: none; letter-spacing: .02em; }
 .logo span { color: var(--accent); }
@@ -269,7 +301,12 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
 
 <nav class="nav" aria-label="주 메뉴">
   <div class="wrap">
-    <a class="logo" href="#top">AI <span>SARGENT</span></a>
+    <div class="nav-left">
+      <button type="button" class="menu-btn" id="menu-open" aria-label="메뉴 열기" aria-haspopup="dialog" aria-controls="drawer" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <a class="logo" href="#top">AI <span>SARGENT</span></a>
+    </div>
     <div class="nav-links">
       <a href="#features">기능</a>
       <a href="#science">측정 원리</a>
@@ -377,7 +414,9 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       "사람을 찾지 못했어요. 몸 전체가 보이게 찍어 주세요": "No person found. Film with your whole body in view",
       "새 영상 · 재생하거나 프레임을 넘겨 보세요": "New video · play it or step through frames",
       "인식 준비 완료 · 재생하거나 프레임을 넘겨 보세요": "Ready · play the video or step through frames",
-      "자세 인식을 껐어요": "Pose tracking is off", "영상 지우기": "Remove video", "분석하기": "Analyze", "분석 중지": "Stop analysis", "체공 시간": "Air time",
+      "자세 인식을 껐어요": "Pose tracking is off",
+      "메뉴 열기": "Open menu", "메뉴 닫기": "Close menu", "더보기 메뉴": "More menu", "내 프로필": "My profile", "홈": "Home", "기록 보관함": "Records", "검색": "Search",
+      "내 측정 기록": "My measurements", "운동 루틴": "Training routines", "랭킹": "Rankings", "설정": "Settings", "공지사항": "Notices", "고객센터": "Help center", "이벤트": "Events", "영상 지우기": "Remove video", "분석하기": "Analyze", "분석 중지": "Stop analysis", "체공 시간": "Air time",
       "모델 준비 중…": "Preparing model…", "분석을 멈췄어요": "Analysis stopped",
       "발이 보이는 프레임이 너무 적어요. 발 전체가 나오게 옆에서 찍어 주세요": "Too few frames show your feet. Film from the side with your whole feet in view",
       "점프를 찾지 못했어요. 발이 잘 보이게 옆에서 찍었는지 확인해 주세요": "No jump found. Check that you filmed from the side with your feet clearly visible", "일시정지": "Pause", "끝까지 재생했어요": "Reached the end",
@@ -780,6 +819,53 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     <p class="muted">인스타그램 <span class="handle">@ai_sargent_1104</span></p>
   </div>
 </section>
+
+<dialog id="drawer" class="drawer" aria-label="더보기 메뉴">
+  <div class="drawer-head">
+    <button type="button" class="drawer-close" id="menu-close" aria-label="메뉴 닫기">×</button>
+    <div class="drawer-avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="4" fill="#FFFFFF"/><path d="M4.5 20.5c1.4-3.6 4.2-5.3 7.5-5.3s6.1 1.7 7.5 5.3" fill="#FFFFFF"/></svg></div>
+    <p class="drawer-name">내 프로필 <span class="chev" aria-hidden="true">›</span> <span class="soon">준비 중</span></p>
+  </div>
+  <div class="drawer-quick">
+        <button type="button" class="dq" aria-disabled="true">
+          <span class="dq-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5V20a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span class="soon">준비 중</span></span>
+          <span>홈</span>
+        </button>
+        <button type="button" class="dq" aria-disabled="true">
+          <span class="dq-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="4" y="13" width="16" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M10 7.5h4M10 16.5h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span class="soon">준비 중</span></span>
+          <span>기록 보관함</span>
+        </button>
+        <button type="button" class="dq" aria-disabled="true">
+          <span class="dq-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span class="soon">준비 중</span></span>
+          <span>검색</span>
+        </button>
+  </div>
+  <ul class="drawer-list">
+        <li><button type="button" aria-disabled="true"><span>내 측정 기록</span><span class="soon">준비 중</span></button></li>
+        <li><button type="button" aria-disabled="true"><span>운동 루틴</span><span class="soon">준비 중</span></button></li>
+        <li><button type="button" aria-disabled="true"><span>랭킹</span><span class="soon">준비 중</span></button></li>
+        <li><button type="button" aria-disabled="true"><span>설정</span><span class="soon">준비 중</span></button></li>
+  </ul>
+  <ul class="drawer-list">
+        <li><button type="button" aria-disabled="true"><span>공지사항</span><span class="soon">준비 중</span></button></li>
+        <li><button type="button" aria-disabled="true"><span>고객센터</span><span class="soon">준비 중</span></button></li>
+        <li><button type="button" aria-disabled="true"><span>이벤트</span><span class="soon">준비 중</span></button></li>
+  </ul>
+</dialog>
+<script>
+// 더보기 메뉴: ☰ 로 열고, × · 바깥 어두운 곳 · Esc 로 닫음. 안의 항목은 모두 준비 중이라 눌러도 아무 일도 없음
+(() => {
+  const d = document.getElementById("drawer"), open = document.getElementById("menu-open");
+  open.addEventListener("click", () => {
+    if (typeof d.showModal === "function") d.showModal(); else d.setAttribute("open", "");
+    open.setAttribute("aria-expanded", "true");
+    document.getElementById("menu-close").focus();
+  });
+  document.getElementById("menu-close").addEventListener("click", () => d.close());
+  d.addEventListener("click", (e) => { if (e.target === d) d.close(); });
+  d.addEventListener("close", () => { open.setAttribute("aria-expanded", "false"); open.focus(); });
+})();
+</script>
 
 <dialog id="auth" class="auth" aria-labelledby="auth-title">
   <div class="auth-inner">
