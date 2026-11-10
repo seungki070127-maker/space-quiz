@@ -6,7 +6,7 @@
 <style>:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 </head>
 <body>
-<title>AI 서전트</title>
+<title>AI EXERCISE</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;500;700;800&display=swap">
@@ -80,7 +80,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 @media (prefers-reduced-motion: reduce) { .drawer[open] { animation: none; } }
 @media (max-width: 420px) { .menu-btn { width: 36px; height: 36px; } .nav-left { gap: 8px; } }
 /* 좁은 휴대폰: 로고와 버튼이 겹치지 않게 조금씩 줄임 */
-@media (max-width: 380px) { .nav .wrap { gap: 8px; } .nav .wrap .logo { font-size: 17px; } .nav-right .btn.small { padding: 0 10px; font-size: 13px; min-height: 36px; } .menu-btn { width: 34px; height: 34px; } }
+@media (max-width: 400px) { .nav .wrap { gap: 8px; } .nav .wrap .logo { font-size: 17px; } .nav-right .btn.small { padding: 0 10px; font-size: 13px; min-height: 36px; } .menu-btn { width: 34px; height: 34px; } }
 @media (max-width: 340px) { .nav .wrap .logo { font-size: 14px; } .nav-left { gap: 6px; } .nav-right { gap: 4px; } .nav-right .btn.small { padding: 0 8px; font-size: 12px; min-height: 34px; } .menu-btn { width: 32px; height: 32px; } }
 .nav .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 14px; }
 .logo { font-family: var(--font-display); font-size: 22px; text-decoration: none; letter-spacing: .02em; }
@@ -183,7 +183,7 @@ section.block .wrap { display: flex; flex-direction: column; gap: 40px; padding-
 .compare td:first-child { font-weight: 800; width: 18%; }
 .compare td.old { color: var(--muted); }
 .compare td.ours { font-weight: 700; background: rgba(255, 122, 51, .08); }
-/* 휴대폰: 표가 옆으로 잘려 "AI SARGENT" 칸(제자리멀리뛰기 자세 분석 등)이 안 보이던 문제 → 항목마다 카드로 세로 배치 */
+/* 휴대폰: 표가 옆으로 잘려 "AI EXERCISE" 칸(제자리멀리뛰기 자세 분석 등)이 안 보이던 문제 → 항목마다 카드로 세로 배치 */
 @media (max-width: 640px) {
   .table-scroll { overflow: visible; border: 0; }
   .compare, .compare tbody, .compare tr, .compare td { display: block; width: 100%; }
@@ -309,7 +309,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       <button type="button" class="menu-btn" id="menu-open" aria-label="메뉴 열기" aria-haspopup="dialog" aria-controls="drawer" aria-expanded="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       </button>
-      <a class="logo" href="#top">AI <span>SARGENT</span></a>
+      <a class="logo" href="#top">AI <span>EXERCISE</span></a>
     </div>
     <div class="nav-links">
       <a href="#features">기능</a>
@@ -413,7 +413,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       "비싼 기기 없이, 망설임 없이": "No expensive gear, no hesitation,", "내 기록을 올린다.": "raise your record.",
       "지금 바로 휴대폰으로 서전트를 재 보세요.": "Measure your vertical jump with your phone right now.",
       "인스타그램 팔로우": "Follow on Instagram", "인스타그램": "Instagram",
-      "© 2026 AI SARGENT · 만든 사람 박승기": "© 2026 AI SARGENT · Made by 박승기",
+      "© 2026 AI EXERCISE · 만든 사람 박승기": "© 2026 AI EXERCISE · Made by 박승기",
       "모델 불러오는 중… (처음 한 번, 약 22MB)": "Loading model… (first time only, about 22MB)",
       "사람을 찾지 못했어요. 몸 전체가 보이게 찍어 주세요": "No person found. Film with your whole body in view",
       "새 영상 · 재생하거나 프레임을 넘겨 보세요": "New video · play it or step through frames",
@@ -486,7 +486,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       document.documentElement.lang = next;
       if (next === "en") {
         trTree(document.body);
-        document.title = "AI Sargent";
+        document.title = "AI EXERCISE";
         observer = new MutationObserver((recs) => recs.forEach((r) => {
           if (r.type === "characterData") trText(r.target);
           else r.addedNodes.forEach(trTree);
@@ -497,7 +497,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
         done.forEach(([n, ko, en]) => { if (n.nodeValue === en) n.nodeValue = ko; });
         done.clear();
         doneAttr.splice(0).forEach(([el, a, ko]) => el.setAttribute(a, ko));
-        document.title = "AI 서전트";
+        document.title = "AI EXERCISE";
       }
       document.querySelectorAll(".lang button").forEach((x) => x.setAttribute("aria-pressed", String(x.lang === next)));
       document.querySelector(".lang").dataset.active = next;
@@ -801,11 +801,11 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     </div>
     <div class="table-scroll">
       <table class="compare">
-        <thead><tr><th>구분</th><th>지금까지</th><th class="ours">AI SARGENT</th></tr></thead>
+        <thead><tr><th>구분</th><th>지금까지</th><th class="ours">AI EXERCISE</th></tr></thead>
         <tbody>
-          <tr><td>측정</td><td class="old" data-label="지금까지">비싼 기기가 필요하다</td><td class="ours" data-label="AI SARGENT">휴대폰 하나로 측정</td></tr>
-          <tr><td>자세</td><td class="old" data-label="지금까지">혼자서는 확인하기 어렵다</td><td class="ours" data-label="AI SARGENT">제자리멀리뛰기 자세 분석</td></tr>
-          <tr><td>운동</td><td class="old" data-label="지금까지">어떻게 할지 물어보기 어렵다</td><td class="ours" data-label="AI SARGENT">운동 방향을 바로 제시</td></tr>
+          <tr><td>측정</td><td class="old" data-label="지금까지">비싼 기기가 필요하다</td><td class="ours" data-label="AI EXERCISE">휴대폰 하나로 측정</td></tr>
+          <tr><td>자세</td><td class="old" data-label="지금까지">혼자서는 확인하기 어렵다</td><td class="ours" data-label="AI EXERCISE">제자리멀리뛰기 자세 분석</td></tr>
+          <tr><td>운동</td><td class="old" data-label="지금까지">어떻게 할지 물어보기 어렵다</td><td class="ours" data-label="AI EXERCISE">운동 방향을 바로 제시</td></tr>
         </tbody>
       </table>
     </div>
@@ -874,7 +874,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
 <dialog id="auth" class="auth" aria-labelledby="auth-title">
   <div class="auth-inner">
     <div class="auth-head">
-      <h2 class="display" id="auth-title">AI <span class="hl">SARGENT</span></h2>
+      <h2 class="display" id="auth-title">AI <span class="hl">EXERCISE</span></h2>
       <button type="button" class="auth-close" id="auth-close" aria-label="닫기">×</button>
     </div>
     <div class="auth-tabs" role="tablist" aria-label="로그인 또는 회원가입" data-active="login">
@@ -1103,7 +1103,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
 
 <footer>
   <div class="wrap">
-    <span>© 2026 AI SARGENT · 만든 사람 박승기</span>
+    <span>© 2026 AI EXERCISE · 만든 사람 박승기</span>
     <a href="https://www.instagram.com/ai_sargent_1104/" target="_blank" rel="noopener">Instagram @ai_sargent_1104</a>
   </div>
 </footer>
