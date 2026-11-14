@@ -103,7 +103,7 @@ const CONFIG = {
   cross:  { min: 14, max: 48, angle: 38, assist: 35 },                   // 비거리, 발사각(도), 조준 보정각(도)
   ball:   { g: 9.8, bounce: 0.55, roll: 0.5, rollFlat: 1.2, air: 0.12 },
   tackle: { user: 3.0, cpu: 1.2, slideSpeed: 9, slideTime: 0.55 },       // 초당 공 뺏기 확률
-  gk:     { speed: 5, dive: 6.5, reach: 1.15, reactMin: 0.14, reactMax: 0.3, catch: 0.7, hold: 1.1 },
+  gk:     { speed: 5, dive: 6.5, reach: 1.15, reactMin: 0.14, reactMax: 0.3, catch: 0.7, hold: 1.1, userHold: 8, carry: 4, punt: [28, 62] },   // userHold: 내 골키퍼가 공을 들고 있을 수 있는 시간, carry: 들고 걷는 속도, punt: 슛 버튼 롱킥 거리
   cpu:    { think: 0.3, shootRange: 20, passUrge: 0.1, shotError: 0.1 },
   cam:    { h: 23, back: 40, pitch: 31, zoom: 1.35, follow: 3 }   // 높이, 뒤로 거리, 내려보는 각(도), 확대,
 };
@@ -211,6 +211,7 @@ function slide(p){
 function doKick(p,vx,vy,vz,power){
   if (ball.owner===p){ ball.x=p.x+Math.cos(p.a)*0.6; ball.z=p.z+Math.sin(p.a)*0.6; ball.y=p.gk?0.4:BR; }
   ball.owner=null; ball.vx=vx; ball.vy=vy; ball.vz=vz; ball.last=p.team;
+  if (p.gk && S.ctrl===p) switchPlayer();
   p.cool=0.45; p.kickT=0.28; p.a=Math.atan2(vz,vx); p.hold=0;
   sfx.kick(power??0.5);
 }
@@ -247,6 +248,9 @@ function userKick(p,type,power){
     const c=CONFIG.pass, v=c.min+(c.max-c.min)*power;
     const m=pickMate(p,ax,az,c.wantMin+(c.wantMax-c.wantMin)*power,c.angle,3);
     if (m) passTo(p,m,v); else doKick(p,ax*v,0,az*v,power);
+  } else if (type==="shoot" && p.gk){                      // 골키퍼의 슛 버튼 = 롱킥
+    const [a,b]=CONFIG.gk.punt, d=a+(b-a)*power, m=pickMate(p,ax,az,d,25,20);
+    if (m) crossTo(p,m.x+m.vx,m.z+m.vz,m); else crossTo(p,p.x+ax*d,p.z+az*d,null);
   } else if (type==="shoot"){
     const c=CONFIG.shot, gx=HL*p.dir, gd=hyp(gx-p.x,p.z)||1;
     if ((ax*(gx-p.x)+az*(-p.z))/gd < -0.2){               // 골대를 등지면 보는 방향으로 찬다
@@ -267,8 +271,8 @@ function userKick(p,type,power){
 function setOwner(p){
   ball.owner=p; ball.last=p.team; S.poss=p.team;
   if (S.side!==p.team){ S.side=p.team; S.press=0; } S.recv[0]=S.recv[1]=null;
-  if (p.team===0 && !p.gk) S.ctrl=p;
-  if (p.gk) p.hold=CONFIG.gk.hold;
+  if (p.team===0) S.ctrl=p;                               // 내 골키퍼가 잡으면 골키퍼를 직접 조작
+  if (p.gk) p.hold=p.team===0?CONFIG.gk.userHold:CONFIG.gk.hold;
   p.think=rnd(0.2,0.5);
 }
 function possession(dt){
@@ -504,6 +508,13 @@ function stepPlayers(dt){
       p.vx*=1-1.8*dt; p.vz*=1-1.8*dt; if (p.slideT<=0) p.stun=0.4; continue;
     }
     if (p.stun>0){ p.stun-=dt; steer(p,0,0,dt); continue; }
+    if (p.gk && p===S.ctrl && o===p && !S.dead){           // 공 잡은 내 골키퍼: 페널티박스 안에서 직접 이동
+      const iv=inputVec(); steer(p,iv.x*CONFIG.gk.carry,iv.z*CONFIG.gk.carry,dt);
+      p.x=clamp(p.x,-HL+0.5,-HL+16); p.z=clamp(p.z,-19.5,19.5);
+      if (iv.m<0.15) p.a+=Math.atan2(Math.sin(-p.a),Math.cos(-p.a))*Math.min(1,dt*6);
+      if ((p.hold-=dt)<=0) stepGk(p,dt);                    // 너무 오래 들고 있으면 자동 배급
+      continue;
+    }
     if (p.gk){ stepGk(p,dt); continue; }
     let sp=CONFIG.player.speed*(p.team?CONFIG.player.cpuSpeed:1)*(o===p?CONFIG.player.dribble:1);
     if (p===S.ctrl && !S.dead){
