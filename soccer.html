@@ -124,7 +124,7 @@ const S = { mode:"title" };
 const ball = {};
 let players = [];
 function resetState(){
-  Object.assign(S, { t:0, time:0, score:[0,0], half:1, freeze:0, dead:false, poss:-1, recv:[null,null],
+  Object.assign(S, { t:0, time:0, score:[0,0], half:1, freeze:0, dead:false, poss:-1, side:0, recv:[null,null],
     ctrl:null, charge:null, press:false, scorer:-1, pending:null, msgT:0 });
   players = [];
   for (let team=0; team<2; team++) FORM.forEach(([hx,hz,role],i) => players.push({
@@ -179,7 +179,7 @@ function inputVec(){
   const m=hyp(x,z); if (m>1){ x/=m; z/=m; }
   return { x, z, m:Math.min(1,m) };
 }
-const defending = () => !!ball.owner && ball.owner.team===1;
+const defending = () => S.side===1;      // 마지막으로 공을 잡은 팀 기준: 패스·루즈볼 중에는 버튼이 바뀌지 않음
 function press(type){
   if (S.mode!=="playing" || S.freeze>0 || S.dead) return;
   const c=S.ctrl;
@@ -266,7 +266,8 @@ function userKick(p,type,power){
 
 /* ===== 소유 ===== */
 function setOwner(p){
-  ball.owner=p; ball.last=p.team; S.poss=p.team; S.recv[0]=S.recv[1]=null;
+  ball.owner=p; ball.last=p.team; S.poss=p.team;
+  if (S.side!==p.team){ S.side=p.team; S.press=false; S.charge=null; } S.recv[0]=S.recv[1]=null;
   if (p.team===0 && !p.gk) S.ctrl=p;
   if (p.gk) p.hold=CONFIG.gk.hold;
   p.think=rnd(0.2,0.5);
