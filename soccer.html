@@ -67,9 +67,9 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
     <p>블루 팀을 조작해 레드 팀을 이기세요. 버튼을 길게 누를수록 강하게 찹니다.</p>
     <dl>
       <dt>이동</dt><dd>화면 왼쪽 드래그 · WASD / 방향키</dd>
-      <dt>패스</dt><dd>패스 버튼 · J (수비 시 선수 전환)</dd>
-      <dt>슛</dt><dd>슛 버튼 · K (수비 시 슬라이딩 태클)</dd>
-      <dt>크로스</dt><dd>크로스 버튼 · L (수비 시 압박)</dd>
+      <dt>패스</dt><dd>패스 버튼 · J (공 없을 때 짧게: 선수 전환)</dd>
+      <dt>슛</dt><dd>슛 버튼 · K (공 없을 때 짧게: 태클)</dd>
+      <dt>크로스</dt><dd>크로스 버튼 · L (공 없을 때 짧게: 압박)</dd>
       <dt>일시정지</dt><dd>P / Esc</dd>
     </dl>
     <button class="btn" id="bStart">경기 시작</button>
@@ -97,7 +97,7 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
 const CONFIG = {
   matchSeconds: 240,                       // 실제 플레이 시간(전·후반 합계) → 화면 시계 90분
   player: { speed: 7.0, dribble: 0.9, accel: 7, cpuSpeed: 0.93, control: 0.9 },
-  charge: { time: 0.9, min: 0.1 },         // 버튼을 이만큼 누르면 강도 100%
+  charge: { time: 0.9, min: 0.1, tap: 0.2, pressTime: 1.5 },   // 100%까지 걸리는 시간, 이보다 짧으면 '한 번 누름', 압박 지속 시간
   pass:   { min: 9, max: 25, wantMin: 8, wantMax: 38, angle: 60 },      // 땅볼 패스 속도, 강도별 목표 거리
   shot:   { min: 17, max: 32, liftBase: 1.5, liftPow: 5.5, error: 0.03, errorPow: 0.07, aimWidth: 3.4 },
   cross:  { min: 14, max: 48, angle: 38, assist: 35 },                   // 비거리, 발사각(도), 조준 보정각(도)
@@ -138,7 +138,7 @@ function kickoff(team){
   Object.assign(ball, { x:0, y:BR, z:0, vx:0, vy:0, vz:0, owner:null, last:team, spin:0 });
   for (const p of players) if (p.team!==team && hyp(p.x,p.z)<10) p.x=-10.5*p.dir;   // 상대는 센터서클 밖
   const k = players[team*11+9]; k.x=-0.6*k.dir; k.z=0;
-  S.dead=false; S.scorer=-1; S.charge=null; S.press=false;
+  S.dead=false; S.scorer=-1; S.charge=null; S.press=0;
   S.ctrl = players[9];
   setOwner(k);
   S.freeze = 1.3; say("킥오프", 1.2); sfx.whistle();
@@ -182,20 +182,19 @@ function inputVec(){
 const defending = () => S.side===1;      // 마지막으로 공을 잡은 팀 기준: 패스·루즈볼 중에는 버튼이 바뀌지 않음
 function press(type){
   if (S.mode!=="playing" || S.freeze>0 || S.dead) return;
-  const c=S.ctrl;
-  if (defending()){
-    if (type==="pass") switchPlayer();
-    else if (type==="shoot") slide(c);
-    else S.press=true;
-  } else S.charge={ type, t:0 };
+  S.charge={ type, t:0, own: ball.owner===S.ctrl };
 }
+// 공을 가졌으면 항상 킥. 공이 없을 때(뺏김·공중볼): 짧게 누르면 전환/태클/압박, 길게 누르면 패스/슛/크로스 충전
 function release(type){
-  if (type==="cross") S.press=false;
   const ch=S.charge; if (!ch || ch.type!==type) return;
   S.charge=null;
   if (S.mode!=="playing" || S.dead) return;
   const c=S.ctrl, power=clamp(ch.t/CONFIG.charge.time, CONFIG.charge.min, 1);
-  if (ball.owner===c || (!ball.owner && c.cool<=0 && dist(c,ball)<1.5 && ball.y<2.3)) userKick(c,type,power);
+  if (ball.owner===c || (!ball.owner && c.cool<=0 && dist(c,ball)<1.5 && ball.y<2.3)) return userKick(c,type,power);
+  if (ch.own || ch.t>CONFIG.charge.tap) return;
+  if (type==="pass") switchPlayer();
+  else if (type==="shoot") slide(c);
+  else S.press=CONFIG.charge.pressTime;
 }
 function switchPlayer(){
   let best=null, bd=1e9;
@@ -267,7 +266,7 @@ function userKick(p,type,power){
 /* ===== 소유 ===== */
 function setOwner(p){
   ball.owner=p; ball.last=p.team; S.poss=p.team;
-  if (S.side!==p.team){ S.side=p.team; S.press=false; S.charge=null; } S.recv[0]=S.recv[1]=null;
+  if (S.side!==p.team){ S.side=p.team; S.press=0; } S.recv[0]=S.recv[1]=null;
   if (p.team===0 && !p.gk) S.ctrl=p;
   if (p.gk) p.hold=CONFIG.gk.hold;
   p.think=rnd(0.2,0.5);
@@ -349,7 +348,7 @@ function goal(team){
   S.pending={ t:2.8, fn:()=>kickoff(1-team) };
 }
 function setPiece(team,x,z,label,byGk){
-  S.dead=true; S.charge=null; S.press=false; say(label,1.1); sfx.whistle();
+  S.dead=true; S.charge=null; S.press=0; say(label,1.1); sfx.whistle();
   S.pending={ t:0.9, fn:()=>{
     Object.assign(ball,{ x, y:BR, z, vx:0, vy:0, vz:0, owner:null });
     let taker=null, bd=1e9;
@@ -510,7 +509,7 @@ function stepPlayers(dt){
     if (p===S.ctrl && !S.dead){
       const iv=inputVec();
       if (iv.m>0.15) steer(p,iv.x*sp,iv.z*sp,dt);
-      else if (S.press && defending()) moveTo(p,ball.x,ball.z,sp,dt);
+      else if (S.press>0 && o!==p && !(o && o.team===0)){ const [x,z]=o?[ball.x,ball.z]:chasePoint(p); moveTo(p,x,z,sp,dt); }
       else if (!o && S.recv[0]===p){ const [x,z]=chasePoint(p); moveTo(p,x,z,sp,dt); }
       else { steer(p,0,0,dt); if (o!==p) p.a=Math.atan2(ball.z-p.z,ball.x-p.x); }
     } else {
@@ -536,6 +535,7 @@ function update(dt){
     else if (S.t>=CONFIG.matchSeconds) return finish();
   }
   if (S.charge) S.charge.t+=dt;
+  if (S.press>0) S.press-=dt;
   stepPlayers(dt);
   stepBall(dt);
   if (!S.dead) possession(dt);
@@ -557,7 +557,7 @@ function setMode(m){
   $("ovTitle").hidden=m!=="title"; $("ovPause").hidden=m!=="paused"; $("ovFull").hidden=m!=="full";
   const inGame=m==="playing"||m==="paused";
   $("hud").hidden=m==="title"; $("corner").hidden=!inGame; $("pad").hidden=m!=="playing";
-  if (m!=="playing"){ $("msg").hidden=true; keys.clear(); stick.id=null; stick.x=stick.z=0; S.charge=null; S.press=false; }
+  if (m!=="playing"){ $("msg").hidden=true; keys.clear(); stick.id=null; stick.x=stick.z=0; S.charge=null; S.press=0; }
   ({title:$("bStart"),paused:$("bResume"),full:$("bRestart2")})[m]?.focus();
 }
 function start(){ resetState(); setMode("playing"); }
@@ -699,7 +699,7 @@ function drawEntities(){
     const h=proj(c.x,2.05,c.z);
     if (h){
       ctx.fillStyle="#ffd84a"; ctx.beginPath(); ctx.moveTo(h.x-6,h.y-9); ctx.lineTo(h.x+6,h.y-9); ctx.lineTo(h.x,h.y); ctx.fill();
-      if (S.charge){ const pw=clamp(S.charge.t/CONFIG.charge.time,0,1), bw=46;
+      if (S.charge && (ball.owner===c || S.charge.t>CONFIG.charge.tap)){ const pw=clamp(S.charge.t/CONFIG.charge.time,0,1), bw=46;
         ctx.fillStyle="rgba(0,0,0,.6)"; ctx.fillRect(h.x-bw/2-1,h.y-22,bw+2,8);
         ctx.fillStyle=pw<0.6?"#4ade80":pw<0.85?"#facc15":"#f87171"; ctx.fillRect(h.x-bw/2,h.y-21,bw*pw,6); }
     }
@@ -759,7 +759,7 @@ for (const b of document.querySelectorAll(".act")){
   const up=()=>{ b.classList.remove("on"); release(type); };
   b.addEventListener("pointerup",up); b.addEventListener("pointercancel",up);
   b.addEventListener("click",e=>{ if (e.detail!==0) return;      // 키보드로 버튼을 누른 경우: 중간 세기
-    press(type); if (S.charge) S.charge.t=CONFIG.charge.time*0.45; release(type); });
+    press(type); if (S.charge && S.charge.own) S.charge.t=CONFIG.charge.time*0.45; release(type); });
   b.addEventListener("contextmenu",e=>e.preventDefault());
 }
 $("bStart").onclick=start; $("bRestart1").onclick=start; $("bRestart2").onclick=start;
