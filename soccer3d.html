@@ -119,7 +119,7 @@ const THREE=window.THREE;
 /* ===== 조정값: 여기 숫자만 바꿔서 느낌을 튜닝하세요 (거리 m, 속도 m/s, 시간 초) ===== */
 const CONFIG = {
   matchSeconds: 240,                       // 실제 플레이 시간(전·후반 합계) → 화면 시계 90분
-  size:   { player: 1.3, ball: 1.0, goalHalfWidth: 4.7, goalHeight: 3.1, pitch: 1.0 },   // 화면에 보이는 선수·공 크기 배율, 골대 반폭·높이(m), pitch: 경기장 크기 배율(1 = 105×68m)
+  size:   { player: 1.3, ball: 1.0, goalHalfWidth: 4.7, goalHeight: 3.1, lengthSec: 17, widthSec: 10 },   // 화면에 보이는 선수·공 크기 배율, 골대 반폭·높이(m), lengthSec·widthSec: 최고 속도로 경기장 가로·세로를 끝에서 끝까지 달리는 데 걸리는 시간(초). 경기장 크기가 이 값으로 정해짐
   pose:   { useVideoRun: true, blend: 1.6, rate: 1 },   // useVideoRun: 영상에서 뽑은 달리기 동작 사용(false면 기존 계산 동작), blend: 클수록 느린 속도에서도 달리기 자세가 강하게, rate: 달리기 동작 재생 빠르기(1 = 원래, 2 = 2배)
   gfx:    { shadows: true, shadowMap: 2048, maxPixelRatio: 2 },   // 느린 기기에서는 shadows:false, maxPixelRatio:1 로
   shape:  { leash: 22, wobble: 1.2, followBall: 0.2,       // leash: 두 번째 수비가 도우러 나가는 거리, wobble: 제자리 어슬렁 폭, followBall: 대형이 공 쪽(좌우)으로 쏠리는 정도
@@ -136,15 +136,19 @@ const CONFIG = {
   tackle: { user: 3.0, cpu: 1.2, slideSpeed: 9, slideTime: 0.55 },       // 초당 공 뺏기 확률
   gk:     { speed: 6.5, dive: 6.0, reach: 1.1, reactMin: 0.17, reactMax: 0.33, catch: 0.6, hold: 1.1, userHold: 8, carry: 4, punt: [28, 62] },   // userHold: 내 골키퍼가 공을 들고 있을 수 있는 시간, carry: 들고 걷는 속도, punt: 슛 버튼 롱킥 거리
   cpu:    { think: 0.3, shootRange: 20, passUrge: 0.1, shotError: 0.15 },
-  cam:    { h: 15.4, back: 42.3, pitch: 20, zoom: 1.13, follow: 2.6, yaw: 0, lead: 0.3, aim: 3.5 },   // 높이, 뒤로 거리, 내려보는 각(도), 확대(클수록 망원), 따라가는 속도, 골대 쪽으로 도는 각(도, 0 = 안 돎), 공 진행방향 미리보기(초), aim: 공보다 이만큼(m) 카메라 쪽을 화면 중앙에
+  cam:    { h: 20.4, back: 40.1, pitch: 27, zoom: 0.9, follow: 2.6, yaw: 0, lead: 0.3, aim: 7, ahead: 6 },   // 높이, 뒤로 거리, 내려보는 각(도), 확대(클수록 망원), 따라가는 속도, 골대 쪽으로 도는 각(도, 0 = 안 돎), 공 진행방향 미리보기(초), aim: 공보다 이만큼(m) 카메라 쪽을 화면 중앙에, ahead: 내 팀이 공격하는 방향으로 이만큼(m) 앞을 보여 줌
 };
-const PS = CONFIG.size.pitch, HL = 52.5*PS, HW = 34*PS, PBX = 16.5*PS, PBZ = 20.16*PS, GBX = 5.5*PS, GBZ = 9.16*PS, CR = 9.15*PS,   // 경기장 반길이·반폭, 페널티박스, 골에어리어, 센터서클
+const HL = CONFIG.player.speed*CONFIG.size.lengthSec/2, HW = CONFIG.player.speed*CONFIG.size.widthSec/2,   // 경기장 반길이·반폭(m)
+      SX = HL/52.5, SZ = HW/34,                                                // 실제 경기장(105×68m) 대비 배율 (대형 위치에 사용)
+      PBX = 16.5, PBZ = 20.16, GBX = 5.5, GBZ = 9.16, CR = 9.15,               // 박스·서클은 실제 규격 그대로(선수 크기 대비 사진과 같은 비율)
+        // 경기장 반길이·반폭, 페널티박스, 골에어리어, 센터서클
        GW = CONFIG.size.goalHalfWidth, GH = CONFIG.size.goalHeight, BR = 0.11;
 // 4-4-2 대형 (자기 진영 기준 [앞뒤, 좌우, 역할]). 숫자를 바꾸면 기본 위치가 바뀝니다.
 const FORM = [[-50,0,"GK"],
               [-36,-22,"DF"],[-38,-7.5,"DF"],[-38,7.5,"DF"],[-36,22,"DF"],     // 수비 4
               [-20,-23,"MF"],[-21,-8,"MF"],[-21,8,"MF"],[-20,23,"MF"],         // 미드필더 4
-              [-4,-8,"FW"],[-4,8,"FW"]]                                        // 공격 2.map(([x,z,r])=>[x*PS,z*PS,r]);
+              [-4,-8,"FW"],[-4,8,"FW"]                                         // 공격 2
+             ].map(([x,z,r])=>[x*SX,z*SZ,r]);                                  // 경기장 크기에 맞춰 늘림
 const KIT = [{shirt:"#2f6bff",shorts:"#ffffff",sock:"#2f6bff",gk:"#f2c230"},
              {shirt:"#e5383b",shorts:"#1b1b1b",sock:"#e5383b",gk:"#35c46a"}];
 const SKIN = ["#f1c9a5","#c98e62","#8a5a3c"];
@@ -459,7 +463,7 @@ function cpuThink(p){
   if (dG<c.shootRange && Math.abs(p.z)<17 && (dG<12 || Math.random()<0.45)){
     const gkp=players[(1-p.team)*11]; return shootAt(p,(gkp.z>0?-1:1)*rnd(GW*0.25,GW*0.8),rnd(0.5,0.85),c.shotError);
   }
-  if (toLine<14*PS && Math.abs(p.z)>15*PS && Math.random()<0.5){
+  if (toLine<14 && Math.abs(p.z)>PBZ-5 && Math.random()<0.5){
     let m=null, bd=1e9;
     for (const q of players) if (q.team===p.team && q!==p && !q.gk){ const d=hyp(q.x-(gx-p.dir*10),q.z); if (d<bd){bd=d;m=q;} }
     if (m) return crossTo(p,m.x+m.vx,m.z+m.vz,m);
@@ -468,7 +472,7 @@ function cpuThink(p){
     let best=null, bs=2;
     for (const m of players){
       if (m.team!==p.team || m===p || m.gk) continue;
-      const d=dist(p,m); if (d<6 || d>34) continue;
+      const d=dist(p,m); if (d<6 || d>34*(SX+SZ)/2) continue;
       let sc=(m.x-p.x)*p.dir*0.6+rnd(0,6);
       if (nearestOpp(m,m.x,m.z)[0]<4) sc-=6;
       for (const q of players) if (q.team!==p.team){               // 패스 길이 막혔는지
@@ -603,7 +607,7 @@ function update(dt){
   S.time+=dt;
   if (S.msgT>0 && (S.msgT-=dt)<=0) $("msg").hidden=true;
   const cc=CONFIG.cam, k=Math.min(1,cc.follow*dt), ld=ball.owner||S.dead?0.15:cc.lead;
-  cam.tx+=(clamp(ball.x+ball.vx*ld,-HL+4,HL-4)-cam.tx)*k; cam.tz+=(clamp(ball.z+ball.vz*ld,-HW,HW)-cam.tz)*k;
+  cam.tx+=(clamp(ball.x+ball.vx*ld+cc.ahead,-HL+4,HL-4)-cam.tx)*k; cam.tz+=(clamp(ball.z+ball.vz*ld,-HW,HW)-cam.tz)*k;
   cam.yaw+=(cc.yaw*Math.PI/180*clamp(cam.tx/36,-1,1)-cam.yaw)*Math.min(1,dt*1.6);
   cam.x=cam.tx-Math.sin(cam.yaw)*cc.back; cam.z=cam.tz+cc.aim+Math.cos(cam.yaw)*cc.back;
   if (S.freeze>0){ S.freeze-=dt; return; }
@@ -684,7 +688,7 @@ function buildWorld(){
   const flat=(w,d,mat,y)=>{ const m=new THREE.Mesh(new THREE.PlaneGeometry(w,d),mat); m.rotation.x=-Math.PI/2; m.position.y=y; scene.add(m); return m; };
   flat(2*HL+90,2*HW+85,new THREE.MeshLambertMaterial({ color:LOOK.track }),-0.04);
   // 잔디: 세로 줄무늬 + 잔디결 느낌의 잡티
-  const GRW=2*HL+16, GRH=2*HW+15, COLS=16, ROWS=10;       // 체크무늬 칸 수 (가로 16 × 세로 10)
+  const GRW=2*HL+16, GRH=2*HW+15, COLS=Math.round(2*HL/6.6/2)*2, ROWS=Math.round(2*HW/6.8/2)*2;   // 체크무늬 칸: 약 6.6×6.8m
   const grass=canvasTex(1024,704,(g,w,h)=>{
     g.fillStyle=LOOK.apron; g.fillRect(0,0,w,h);
     const px=w/GRW, x0=8*px, sw=2*HL/COLS*px;           // 경기장 + 바깥 여유(가로 8m, 세로 7.5m)를 그림
@@ -702,7 +706,7 @@ function buildWorld(){
   for (const s of [-1,1]){
     seg(s*HL,-PBZ,s*(HL-PBX),-PBZ); seg(s*HL,PBZ,s*(HL-PBX),PBZ); seg(s*(HL-PBX),-PBZ,s*(HL-PBX),PBZ);
     seg(s*HL,-GBZ,s*(HL-GBX),-GBZ); seg(s*HL,GBZ,s*(HL-GBX),GBZ); seg(s*(HL-GBX),-GBZ,s*(HL-GBX),GBZ);
-    const c=s>0?Math.PI:0; arc(s*(HL-11*PS),0,CR,c-0.926,c+0.926); arc(s*(HL-11*PS),0,0.12,0,Math.PI*2);
+    const c=s>0?Math.PI:0; arc(s*(HL-11),0,CR,c-0.926,c+0.926); arc(s*(HL-11),0,0.12,0,Math.PI*2);
     // 골대와 그물
     const post=new THREE.MeshStandardMaterial({ color:0xffffff, roughness:0.4 });
     const bar=(ax,ay,az,bx,by,bz)=>{ const a=new THREE.Vector3(ax,ay,az), b=new THREE.Vector3(bx,by,bz), m=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,a.distanceTo(b),10),post);
@@ -951,7 +955,7 @@ function drawOverlay(){
     }
   }
   if (S.mode!=="playing") return;
-  const rw=116, rh=74, rx=W/2-rw/2, ry=H-rh-10;          // 미니맵
+  const rw=116, rh=Math.round(116*HW/HL), rx=W/2-rw/2, ry=H-rh-10;          // 미니맵
   ctx.fillStyle="rgba(12,40,24,.55)"; ctx.beginPath(); ctx.roundRect(rx,ry,rw,rh,8); ctx.fill();
   ctx.strokeStyle="rgba(255,255,255,.55)"; ctx.lineWidth=1; ctx.stroke();
   ctx.beginPath(); ctx.moveTo(rx+rw/2,ry); ctx.lineTo(rx+rw/2,ry+rh); ctx.stroke();
@@ -1030,7 +1034,7 @@ $("bMute").onclick=()=>{ muted=!muted; const b=$("bMute"); b.textContent=muted?"
 
 muted=true; resetState(); muted=false;                    // 타이틀 배경용 초기 배치(소리 없이)
 $("msg").hidden=true; setMode("title");
-window.GAME={ S, CONFIG, ball, get players(){ return players; }, update, press, release, render, proj, updatePose, poseProcedural, renderer, scene, camera, cam,
+window.GAME={ S, CONFIG, ball, HL, HW, get players(){ return players; }, update, press, release, render, proj, updatePose, poseProcedural, renderer, scene, camera, cam,
   LM, POSE_CONNECTIONS, POSE_CLIPS, loadPoseClip, fromMediaPipe, togglePose };   // 포즈 데이터 연결용
 requestAnimationFrame(t=>{ last=t; requestAnimationFrame(frame); });
 })();
