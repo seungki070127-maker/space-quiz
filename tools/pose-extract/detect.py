@@ -4,7 +4,7 @@ from mediapipe.tasks.python import vision
 opt = vision.PoseLandmarkerOptions(base_options=P.BaseOptions(model_asset_path="pose_heavy.task"), running_mode=vision.RunningMode.IMAGE,
     num_poses=5, min_pose_detection_confidence=0.3, min_pose_presence_confidence=0.3)
 det = vision.PoseLandmarker.create_from_options(opt)
-TILES = [(x, y) for y in (450, 850, 1250) for x in (0, 280)]
+TILES = [(x, y) for y in (100, 760) for x in (0, 280)]
 TS, UP = 800, 2
 def run(frame_no):
     img = cv2.imread(f"fr/{frame_no:04d}.png"); out = []

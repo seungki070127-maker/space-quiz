@@ -1,37 +1,22 @@
-import json, numpy as np, cv2
-T = json.load(open("tracks.json")); tr = [(f, d) for f, d in T[4] if 63 <= f <= 76]
-W = np.array([d["world"] for _, d in tr], float)            # (n,33,3) MediaPipe world: x 오른쪽(화면), y 아래, z 깊이
-n = len(W); print("frames", [f for f,_ in tr])
-SW = [(11,12),(13,14),(15,16),(23,24),(25,26),(27,28)]
+# 여러 걸음을 겹쳐 평균 내서 달리기 한 사이클을 만든다 (선수 한 명이 길게 달리는 영상용)
+import json, sys, numpy as np, cv2
+TRACKS = [int(a) for a in sys.argv[1:]] or [2]           # track.py 출력에서 고른 번호들
+T = json.load(open("tracks.json"))
+SW = [(11,12),(13,14),(15,16),(23,24),(25,26),(27,28),(29,30),(31,32)]
+J = [11,12,13,14,15,16,23,24,25,26,27,28]
 def swap(P):
     Q = P.copy()
     for a,b in SW: Q[a], Q[b] = P[b].copy(), P[a].copy()
     return Q
-J = [11,12,13,14,15,16,23,24,25,26,27,28]
-# 1) 좌우가 뒤바뀐 프레임 바로잡기 (앞 프레임과 더 비슷한 쪽 선택)
-for i in range(1, n):
-    if np.linalg.norm(swap(W[i])[J]-W[i-1][J]) < np.linalg.norm(W[i][J]-W[i-1][J]): W[i] = swap(W[i]); print("swap fixed at", tr[i][0])
-# 2) 몸 기준 축: 위(몸통 평균), 오른쪽(골반선 평균), 앞
-hipC = (W[:,23]+W[:,24])/2; shC = (W[:,11]+W[:,12])/2
-u = (shC-hipC).mean(0); u /= np.linalg.norm(u)
-# 옆에서 찍힌 영상이라 깊이(골반·어깨선 방향)는 믿기 어렵다 → "앞"은 발이 가장 크게 흔들리는 방향으로 잡는다
-A = np.concatenate([W[:,27]-hipC, W[:,28]-hipC]); A = A - np.outer(A@u, u)
-f = np.linalg.svd(A - A.mean(0))[2][0]; f -= u*np.dot(f,u); f /= np.linalg.norm(f)
-votes = [np.dot((W[:,0]-shC).mean(0), f), np.dot((W[:,31]-W[:,29]).mean(0)+(W[:,32]-W[:,30]).mean(0), f)]
-print("forward votes", np.round(votes,3))
-if sum(v > 0 for v in votes) < 1 or (votes[0] < 0 and abs(votes[0]) > abs(votes[1])): f = -f
-r = np.cross(f, u)                                          # 오른쪽 = 앞 × 위
-if np.dot((W[:,24]-W[:,23]).mean(0), r) < 0: W = np.array([swap(w) for w in W]); print("global L/R relabel")
-th = np.radians(12); u, f = np.cos(th)*u - np.sin(th)*f, np.cos(th)*f + np.sin(th)*u   # 달릴 때 몸통이 12도쯤 숙여진다고 보고 수직축 보정
-L = np.stack([(W-hipC[:,None])@f, (W-hipC[:,None])@u, (W-hipC[:,None])@r], -1)   # (n,33,[앞,위,오른쪽])
-# 3) 뼈 길이를 게임 선수 규격으로 고정 (방향만 영상에서 가져옴)
-def unit(v): return v/ (np.linalg.norm(v)+1e-9)
+def mirror(P):
+    Q = swap(P); Q[:,2] *= -1; return Q
+def unit(v): return v/(np.linalg.norm(v)+1e-9)
 def limbdir(v):                                             # 옆으로 벌어지는 성분은 작게 제한 (깊이 잡음 억제)
     v = unit(v); v[2] = np.clip(v[2], -0.22, 0.22); return unit(v)
-def rebuild(P):
+def rebuild(P):                                             # 뼈 길이는 게임 선수 규격, 방향만 영상에서
     O = np.zeros((33,3)); side = np.array([0,0,1.0])
     spine = (P[11]+P[12])/2-(P[23]+P[24])/2; spine[2] = 0; spine = unit(spine)
-    tw = np.clip((P[27,0]-P[28,0])*0.12, -0.12, 0.12)       # 골반은 앞으로 나간 다리 쪽이 살짝 앞으로, 어깨는 반대로
+    tw = np.clip((P[27,0]-P[28,0])*0.12, -0.12, 0.12)
     hip = unit(side + np.array([-tw,0,0])); sh = unit(side + np.array([tw*1.3,0,0]))
     O[24], O[23] = hip*0.115, -hip*0.115
     shc = spine*0.54; O[12], O[11] = shc+sh*0.21, shc-sh*0.21
@@ -40,27 +25,78 @@ def rebuild(P):
     for s_,e,w in ((11,13,15),(12,14,16)):
         O[e] = O[s_]+limbdir(P[e]-P[s_])*0.27; O[w] = O[e]+limbdir(P[w]-P[e])*0.25
     return O
-B = np.array([rebuild(p) for p in L])
-# 4) 반 걸음(한쪽 발이 가장 앞 → 가장 뒤) 구간을 찾고, 나머지 반은 좌우를 뒤집어 붙여 끊김 없는 한 사이클로
-d = B[:,27,0]-B[:,28,0]; print("ankle fwd diff", np.round(d,2))
-i0, i1 = int(np.argmax(d)), int(np.argmin(d))
-if i0 > i1: i0, i1 = i1, i0
-half = B[i0:i1+1]; print("half cycle frames", tr[i0][0], "-", tr[i1][0], "len", len(half))
-def mirror(P):
-    Q = swap(P); Q[:,2] *= -1; return Q
-H = 12
-def resample(seq, m):
-    t = np.linspace(0, len(seq)-1, m+1)[:-1]; i = np.floor(t).astype(int); a = (t-i)[:,None,None]
-    return seq[i]*(1-a)+seq[np.minimum(i+1,len(seq)-1)]*a
-h1 = resample(half, H)
-if d[i0] < 0: h1 = np.array([mirror(p) for p in h1])       # 사이클이 "왼발 앞"에서 시작하도록
-cyc = np.concatenate([h1, np.array([mirror(p) for p in h1])])
-# 5) 원형 평활(떨림 제거) 후 뼈 길이 다시 고정, 발이 땅에 닿게 올리기, 얼굴·손·발끝 점 채우기
-k = np.array([1,2,3,2,1], float); k /= k.sum()
-sm = sum(np.roll(cyc, s, 0)*w for s, w in zip((-2,-1,0,1,2), k))
+
+samples = []                                                # (반 사이클 위상 0~0.5, 자세)
+for ti in TRACKS:
+    tr = T[ti]; t = np.array([f for f, _ in tr], float); W = np.array([d["world"] for _, d in tr], float); n = len(W)
+    for i in range(1, n):                                   # 좌우 뒤바뀜 1차 보정(연속성)
+        if np.linalg.norm(swap(W[i])[J]-W[i-1][J]) < np.linalg.norm(W[i][J]-W[i-1][J]): W[i] = swap(W[i])
+    hipC = (W[:,23]+W[:,24])/2; shC = (W[:,11]+W[:,12])/2
+    u = (shC-hipC).mean(0); u /= np.linalg.norm(u)
+    A = np.concatenate([W[:,27]-hipC, W[:,28]-hipC]); A = A - np.outer(A@u, u)
+    f = np.linalg.svd(A - A.mean(0))[2][0]; f -= u*np.dot(f,u); f /= np.linalg.norm(f)
+    votes = [np.dot((W[:,0]-shC).mean(0), f), np.dot((W[:,31]-W[:,29]).mean(0)+(W[:,32]-W[:,30]).mean(0), f)]
+    if votes[0] < 0: f = -f
+    th = np.radians(float(LEAN)) if (LEAN := 14) else 0
+    u, f = np.cos(th)*u - np.sin(th)*f, np.cos(th)*f + np.sin(th)*u
+    r = np.cross(f, u)
+    if np.dot((W[:,24]-W[:,23]).mean(0), r) < 0: W = np.array([swap(w) for w in W])
+    L = np.stack([(W-hipC[:,None])@f, (W-hipC[:,None])@u, (W-hipC[:,None])@r], -1)
+    d = L[:,27,0]-L[:,28,0]; sep = np.abs(d)
+    # 걸음 박자 찾기. MediaPipe가 좌우를 자주 헷갈리므로 좌우와 무관한 "두 발목의 앞뒤 간격"으로 맞춘다:
+    #   sep ≈ a + b·cos(2π(t−t0)/Th),  Th = 반 사이클(한 걸음) 길이
+    best = (-9, 0, 0)
+    for Th in np.arange(4.0, 9.01, 0.05):
+        for t0 in np.arange(0, Th, 0.1):
+            c = np.corrcoef(sep, np.cos(2*np.pi*(t-t0)/Th))[0,1]
+            if c > best[0]: best = (c, Th, t0)
+    c, Th, t0 = best; v = ((t-t0)/Th) % 1                    # v=0: 두 발이 가장 벌어진 순간
+    print(f"track {ti}: frames {int(t[0])}-{int(t[-1])} n={n} votes={np.round(votes,2)} step={Th:.2f} frames, cycle={2*Th/30:.2f}s, fit r={c:.2f}")
+    for i in range(n):
+        P = L[i].copy()
+        # 좌우 이름을 영상 인식 결과 대신 동작으로 정한다. "기준 다리" = v=0 에서 앞에 있던 다리(이후 뒤로 밀려남)
+        if 0.35 < v[i] < 0.65: lead_is_L = P[27,1] < P[28,1]          # 엇갈리는 순간: 땅을 딛고 있는(발목이 낮은) 쪽
+        else: lead_is_L = (P[27,0] > P[28,0]) == (v[i] < 0.5)
+        legs_swapped = not lead_is_L
+        # 팔: 기준 다리와 같은 쪽 팔은 처음엔 뒤에 있다가 앞으로 나온다
+        if 0.38 < v[i] < 0.62: arms_swapped = legs_swapped
+        else: arms_swapped = not ((P[15,0] < P[16,0]) == (v[i] < 0.5))
+        Q = P.copy()
+        if legs_swapped:
+            for a_, b_ in ((23,24),(25,26),(27,28)): Q[a_], Q[b_] = P[b_].copy(), P[a_].copy()
+        if arms_swapped:
+            for a_, b_ in ((11,12),(13,14),(15,16)): Q[a_], Q[b_] = P[b_].copy(), P[a_].copy()
+        Q[:,2] = 0                                          # 좌우를 다시 정했으므로 옆 방향 성분은 버린다
+        samples.append((v[i]*0.5, rebuild(Q)))              # 반 사이클 위상 0~0.5
+
+H = 12; half = []
+ph = np.array([s[0] for s in samples]); PP = np.array([s[1] for s in samples])
+for b in range(H):
+    c = (b+0.5)/H*0.5; w = 0.025
+    while True:
+        dd = np.abs(ph-c)
+        m = dd < w
+        if m.sum() >= 6 or w > 0.1: break
+        w += 0.01
+    half.append(np.median(PP[m], 0))                        # 중앙값: 잘못 인식된 프레임의 영향을 줄임
+half = np.array(half); print("samples", len(samples), "per-bin ok")
+cyc = np.concatenate([half, np.array([mirror(p) for p in half])])
+k = np.array([1,2,1], float); k /= k.sum()
+sm = sum(np.roll(cyc, s, 0)*w for s, w in zip((-1,0,1), k))
+# 팔은 작은 화면에서 좌우가 자주 섞여 평균 내면 흔들림이 줄어든다 → 영상의 박자는 그대로 두고 폭만 키우고 팔꿈치를 굽힌다
+ARM_GAIN, ELBOW_MIN = 2.0, 1.25
+def ang(v): return np.arctan2(v[0], -v[1])                  # 아래 방향 기준, 앞쪽이 +
+RB = np.array([rebuild(P) for P in sm])
+for s_, e, w in ((11,13,15),(12,14,16)):
+    up_a = np.array([ang(P[e]-P[s_]) for P in RB]); fo_a = np.array([ang(P[w]-P[e]) for P in RB])
+    m = up_a.mean(); new_up = np.clip(m*0.3 + (up_a-m)*ARM_GAIN, -1.1, 1.0)
+    bend = np.maximum(fo_a-up_a, ELBOW_MIN) + 0.25*np.maximum(0, new_up)
+    for i, P in enumerate(RB):
+        P[e] = P[s_] + np.array([np.sin(new_up[i]), -np.cos(new_up[i]), 0])*0.27
+        fa = new_up[i]+bend[i]; P[w] = P[e] + np.array([np.sin(fa), -np.cos(fa), 0])*0.25
 out = []
-for P in sm:
-    O = rebuild(P); fwd = np.array([1.0,0,0]); up = np.array([0,1.0,0]); side = np.array([0,0,1.0])
+for P in RB:
+    O = P.copy(); fwd = np.array([1.0,0,0]); up = np.array([0,1.0,0]); side = np.array([0,0,1.0])
     spine = unit((O[11]+O[12])/2-(O[23]+O[24])/2); head = (O[11]+O[12])/2 + spine*0.23
     O[0] = head+fwd*0.12
     for s,(ei,eo,ear,mo) in ((-1,(1,3,7,9)),(1,(4,6,8,10))):
@@ -69,16 +105,13 @@ for P in sm:
     for el,w,pk,ix,tb in ((13,15,17,19,21),(14,16,18,20,22)):
         dr = unit(O[w]-O[el]); O[ix] = O[w]+dr*0.08; O[pk] = O[w]+dr*0.07; O[tb] = O[w]+dr*0.04
     for kn,an,heel,toe in ((25,27,29,31),(26,28,30,32)):
-        sh = unit(O[an]-O[kn]); tdir = unit(fwd*0.9 - up*max(0.0, sh[0]*-1.2))   # 발이 뒤로 들리면 발끝이 아래로
+        sh = unit(O[an]-O[kn]); tdir = unit(fwd*0.9 - up*max(0.0, sh[0]*-1.2))
         O[toe] = O[an]+tdir*0.15-up*0.03; O[heel] = O[an]-fwd*0.06-up*0.05
     out.append(O)
 out = np.array(out)
-low = out[:,[27,28,29,30,31,32],1].min(1)
-out[:,:,1] += (0.04-low)[:,None]
-out[:,:,0] -= out[:,[23,24],0].mean(1)[:,None]*0   # 골반 중심 = 앞뒤 원점 유지
+low = out[:,[27,28,29,30,31,32],1].min(1); out[:,:,1] += (0.04-low)[:,None]
 print("hip height range", out[:,23,1].min().round(2), out[:,23,1].max().round(2))
-json.dump({"fps": 24, "frames": np.round(out,3).tolist()}, open("run_clip.json","w"), separators=(",",":"))
-# 확인용 그림: 옆에서 본 모습(앞=오른쪽)
+json.dump({"fps": 24, "frames": np.round(out,2).tolist()}, open("run_clip.json","w"), separators=(",",":"))
 CON=[[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[24,26],[25,27],[26,28],[27,31],[28,32]]
 tiles=[]
 for i in range(0, 24, 2):
