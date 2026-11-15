@@ -119,9 +119,10 @@ const THREE=window.THREE;
 /* ===== 조정값: 여기 숫자만 바꿔서 느낌을 튜닝하세요 (거리 m, 속도 m/s, 시간 초) ===== */
 const CONFIG = {
   matchSeconds: 240,                       // 실제 플레이 시간(전·후반 합계) → 화면 시계 90분
-  size:   { player: 1.28, ball: 1.875, goalHalfWidth: 4.7, goalHeight: 3.1, pitch: 1.5 },   // 화면에 보이는 선수·공 크기 배율, 골대 반폭·높이(m), pitch: 경기장 크기 배율(1 = 105×68m)
+  size:   { player: 1.28, ball: 1.875, goalHalfWidth: 4.7, goalHeight: 3.1, pitch: 1.25 },   // 화면에 보이는 선수·공 크기 배율, 골대 반폭·높이(m), pitch: 경기장 크기 배율(1 = 105×68m)
   pose:   { useVideoRun: true, blend: 1.6, rate: 1 },   // useVideoRun: 영상에서 뽑은 달리기 동작 사용(false면 기존 계산 동작), blend: 클수록 느린 속도에서도 달리기 자세가 강하게, rate: 달리기 동작 재생 빠르기(1 = 원래, 2 = 2배)
   gfx:    { shadows: true, shadowMap: 2048, maxPixelRatio: 2 },   // 느린 기기에서는 shadows:false, maxPixelRatio:1 로
+  shape:  { leash: 22, wobble: 1.2, followBall: 0.2 },   // 대형 유지: leash = 자기 자리에서 이 거리(m) 안의 공만 쫓아 나감, wobble = 제자리에서 어슬렁거리는 폭, followBall = 공 쪽(좌우)으로 대형이 쏠리는 정도
   autoSwitch: { every: 0.12, margin: 1.5 },   // 패스 중 자동 선수 전환: 검사 주기(초), 이만큼(m) 더 가까워야 전환
   player: { speed: 10.5, dribble: 0.9, accel: 7, cpuSpeed: 0.93, control: 1.35, controlHeight: 1.6 },   // control: 이 거리 안에 공이 오면 받는다, controlHeight: 이 높이 아래의 공만
   charge: { time: 0.9, min: 0.1, tap: 0.2, pressTime: 1.5 },   // 100%까지 걸리는 시간, 이보다 짧으면 '한 번 누름', 압박 지속 시간
@@ -136,8 +137,11 @@ const CONFIG = {
 };
 const PS = CONFIG.size.pitch, HL = 52.5*PS, HW = 34*PS, PBX = 16.5*PS, PBZ = 20.16*PS, GBX = 5.5*PS, GBZ = 9.16*PS, CR = 9.15*PS,   // 경기장 반길이·반폭, 페널티박스, 골에어리어, 센터서클
        GW = CONFIG.size.goalHalfWidth, GH = CONFIG.size.goalHeight, BR = 0.11;
-const FORM = [[-50,0,"GK"],[-34,-21,"DF"],[-37,-7,"DF"],[-37,7,"DF"],[-34,21,"DF"],
-              [-18,-14,"MF"],[-22,0,"MF"],[-18,14,"MF"],[-4,-20,"FW"],[-2,0,"FW"],[-4,20,"FW"]].map(([x,z,r])=>[x*PS,z*PS,r]);
+// 4-4-2 대형 (자기 진영 기준 [앞뒤, 좌우, 역할]). 숫자를 바꾸면 기본 위치가 바뀝니다.
+const FORM = [[-50,0,"GK"],
+              [-36,-22,"DF"],[-38,-7.5,"DF"],[-38,7.5,"DF"],[-36,22,"DF"],     // 수비 4
+              [-20,-23,"MF"],[-21,-8,"MF"],[-21,8,"MF"],[-20,23,"MF"],         // 미드필더 4
+              [-4,-8,"FW"],[-4,8,"FW"]]                                        // 공격 2.map(([x,z,r])=>[x*PS,z*PS,r]);
 const KIT = [{shirt:"#2f6bff",shorts:"#ffffff",sock:"#2f6bff",gk:"#f2c230"},
              {shirt:"#e5383b",shorts:"#1b1b1b",sock:"#e5383b",gk:"#35c46a"}];
 const SKIN = ["#f1c9a5","#c98e62","#8a5a3c"];
@@ -422,8 +426,10 @@ function autoSwitch(dt){
 }
 function formation(p){
   const k=p.role==="DF"?0.45:p.role==="MF"?0.5:0.52;
-  const lx=clamp(p.hx+(ball.x*p.dir+HL)*k+(S.poss===p.team?4:-2), -HL+4.5, HL-5.5);
-  return [lx*p.dir+Math.cos(S.time*0.3+p.i)*2, clamp(p.hz*0.85+ball.z*0.25+Math.sin(S.time*0.4+p.i*1.7)*2.5, -HW+1, HW-1)];
+  let lx=clamp(p.hx+(ball.x*p.dir+HL)*k+(S.poss===p.team?4:-2), -HL+4.5, HL-5.5);
+  if (S.poss!==p.team && p.role!=="FW") lx=Math.max(-HL+7, Math.min(lx, ball.x*p.dir-(p.role==="DF"?4:-6)));   // 공을 뺏겼을 때: 수비 줄은 공보다 골대 쪽에, 미드필더 줄도 공 뒤로 따라 내려온다
+  const c=CONFIG.shape;                                    // 같은 줄(수비·미드·공격)은 같은 비율로 움직여 일자 대형이 유지된다
+  return [lx*p.dir+Math.cos(S.time*0.3+p.i)*c.wobble, clamp(p.hz*(1-c.followBall*0.6)+ball.z*c.followBall+Math.sin(S.time*0.4+p.i*1.7)*c.wobble, -HW+1, HW-1)];
 }
 function nearestOpp(p,x,z){
   let bd=1e9, bq=null;
@@ -471,9 +477,10 @@ function aiTarget(p,near){
     const r=S.recv[p.team];
     if (r===p || (!r && near[0]===p)) return chasePoint(p);
   } else if (o.team!==p.team && !o.gk){
-    const gx=-HL*p.dir, dx=gx-ball.x, dz=-ball.z, n=hyp(dx,dz)||1;
+    const gx=-HL*p.dir, dx=gx-ball.x, dz=-ball.z, n=hyp(dx,dz)||1, home=formation(p);
     if (near[0]===p) return p.team===1 ? [ball.x,ball.z] : [ball.x+dx/n*1.2, ball.z+dz/n*1.2];
-    if (near[1]===p) return [ball.x+dx/n*4, ball.z+dz/n*4];
+    if (near[1]===p && hyp(home[0]-ball.x,home[1]-ball.z)<CONFIG.shape.leash) return [ball.x+dx/n*4, ball.z+dz/n*4];   // 두 번째 선수는 자기 자리 근처의 공일 때만 도우러 나감
+    return home;
   }
   return formation(p);
 }
