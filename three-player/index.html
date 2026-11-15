@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D 선수 이동 · 애니메이션 블렌딩 데모</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1a12; color: #fff;
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif; }
+  canvas { display: block; touch-action: none; }
+  #hud { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,.55); border-radius: 10px; padding: 10px 12px; min-width: 190px; }
+  #hud b { display: inline-block; width: 68px; }
+  .bar { display: inline-block; width: 90px; height: 8px; background: rgba(255,255,255,.2); border-radius: 4px; vertical-align: middle; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: #4ade80; width: 0; }
+  #help { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,.55); border-radius: 10px; padding: 10px 12px; }
+  /* 화면 왼쪽 아래 가상 조이스틱 */
+  #stick { position: fixed; left: 24px; bottom: 24px; width: 120px; height: 120px; border-radius: 50%;
+    background: rgba(255,255,255,.1); border: 2px solid rgba(255,255,255,.35); touch-action: none; }
+  #knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px; border-radius: 50%; background: rgba(255,255,255,.45); }
+  #msg { position: fixed; left: 0; right: 0; bottom: 12px; text-align: center; opacity: .8; pointer-events: none; }
+</style>
+<!-- import map: "three" 라는 이름을 CDN 주소로 연결. 번들러(Vite 등)를 쓰면 이 부분은 필요 없습니다. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="hud" aria-live="off">
+  <div><b>속도</b><span id="hSpeed">0.0</span> m/s</div>
+  <div><b>Idle</b><span class="bar"><i id="wIdle"></i></span></div>
+  <div><b>Run</b><span class="bar"><i id="wRun"></i></span></div>
+  <div><b>Sprint</b><span class="bar"><i id="wSprint"></i></span></div>
+  <div><b>재생속도</b><span id="hRate">1.00</span>x</div>
+</div>
+<div id="help">이동 WASD / 방향키 · 달리기 Shift · 카메라 회전 Q / E</div>
+<div id="stick" aria-label="이동 조이스틱"><div id="knob"></div></div>
+<div id="msg"></div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
