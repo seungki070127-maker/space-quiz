@@ -8,9 +8,9 @@ pip install mediapipe opencv-python-headless
 curl -o pose_heavy.task https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/latest/pose_landmarker_heavy.task
 mkdir fr && ffmpeg -i 영상.mp4 -vf fps=30 fr/%04d.png
 
-python detect.py 1 136      # 1) 프레임을 조각내 확대한 뒤 사람마다 관절 33개 인식 → det_1_136.json
+python detect.py 1 79       # 1) 프레임을 조각내 확대한 뒤 사람마다 관절 33개 인식 → det_1_79.json
 python track.py             # 2) 프레임 사이에서 같은 선수를 이어 붙여 목록 출력 → tracks.json
-python build_clip.py 2      # 3) 고른 선수(번호)의 여러 걸음을 겹쳐 한 사이클로 정리 → run_clip.json, clip_side.png(확인용 그림)
+python build_clip.py 0      # 3) 고른 선수(번호)의 여러 걸음을 겹쳐 한 사이클로 정리 → run_clip.json, clip_side.png(확인용 그림)
 ```
 
 `run_clip.json` 의 내용을 `soccer.html` 의 `RUN_CLIP_DATA` 에 붙여 넣으면 됩니다.
@@ -18,8 +18,9 @@ python build_clip.py 2      # 3) 고른 선수(번호)의 여러 걸음을 겹�
 ## 영상마다 고쳐야 하는 값
 
 - `detect.py` 의 `TILES`, `TS`, `UP`: 경기 화면이 있는 영역과 확대 배율 (지금은 1080×2340 세로 녹화 기준)
-- `detect.py` / `track.py` 의 프레임 범위와 파일 이름 (`det_1_136.json`)
-- `python build_clip.py 2` 의 숫자: 사용할 선수 번호. `track.py` 출력에서 오래 이어지고 `vis` 가 높고 `ankleSep std` 가 큰(다리를 크게 움직이는) 것을 고릅니다. 여러 개를 적으면 함께 평균 냅니다.
+- `detect.py` / `track.py` 의 프레임 범위와 파일 이름 (`det_1_79.json`), `detect.py` 의 사람 크기 제한(`h < 60 or h > 750`)
+- `build_clip.py` 의 `LEVEL_CAMERA`(수평 정측면 영상이면 True, 위에서 내려다본 게임 화면이면 False), `ARM_FIX`(팔이 잘 안 잡힌 영상만 True)
+- `python build_clip.py 0` 의 숫자: 사용할 선수 번호. `track.py` 출력에서 오래 이어지고 `vis` 가 높고 `ankleSep std` 가 큰(다리를 크게 움직이는) 것을 고릅니다. 여러 개를 적으면 함께 평균 냅니다.
 
 ## build_clip.py 가 하는 일
 

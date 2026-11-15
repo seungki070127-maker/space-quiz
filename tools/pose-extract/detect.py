@@ -2,10 +2,10 @@ import sys, json, time, cv2, numpy as np, mediapipe as mp
 from mediapipe.tasks import python as P
 from mediapipe.tasks.python import vision
 opt = vision.PoseLandmarkerOptions(base_options=P.BaseOptions(model_asset_path="pose_heavy.task"), running_mode=vision.RunningMode.IMAGE,
-    num_poses=5, min_pose_detection_confidence=0.3, min_pose_presence_confidence=0.3)
+    num_poses=2, min_pose_detection_confidence=0.3, min_pose_presence_confidence=0.3)
 det = vision.PoseLandmarker.create_from_options(opt)
-TILES = [(x, y) for y in (100, 760) for x in (0, 280)]
-TS, UP = 800, 2
+TILES = [(0, 560), (280, 560)]
+TS, UP = 800, 1.5
 def run(frame_no):
     img = cv2.imread(f"fr/{frame_no:04d}.png"); out = []
     for (tx, ty) in TILES:
@@ -16,7 +16,7 @@ def run(frame_no):
             vis = float(np.mean([l.visibility for l in lm[11:]]))
             ys = [p[1] for p in px]; h = max(ys) - min(ys)
             cx = (px[23][0]+px[24][0])/2; cy = (px[23][1]+px[24][1])/2
-            if h < 60 or h > 400: continue
+            if h < 60 or h > 750: continue
             if any(abs(cx-o["cx"]) < 40 and abs(cy-o["cy"]) < 40 for o in out): continue
             out.append(dict(cx=cx, cy=cy, h=h, vis=vis, px=[[round(a,1), round(b,1)] for a,b in px],
                             world=[[round(l.x,4), round(l.y,4), round(l.z,4)] for l in wl], wvis=[round(l.visibility,2) for l in wl]))

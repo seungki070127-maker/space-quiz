@@ -1,5 +1,5 @@
 import json, numpy as np
-D = {int(k): v for k, v in json.load(open("det_1_136.json")).items()}
+D = {int(k): v for k, v in json.load(open("det_1_79.json")).items()}
 tracks = []  # each: list of (frame, det)
 for f in sorted(D):
     used = set()

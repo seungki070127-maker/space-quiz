@@ -1,6 +1,8 @@
 # 여러 걸음을 겹쳐 평균 내서 달리기 한 사이클을 만든다 (선수 한 명이 길게 달리는 영상용)
 import json, sys, numpy as np, cv2
-TRACKS = [int(a) for a in sys.argv[1:]] or [2]           # track.py 출력에서 고른 번호들
+TRACKS = [int(a) for a in sys.argv[1:]] or [0]
+LEVEL_CAMERA = True      # 카메라가 수평·정측면이면 True (화면 위쪽을 수직으로 보고 실제 숙임 각도를 그대로 씀)
+ARM_FIX = False          # 팔이 잘 안 잡힌 영상만 True (흔들림 폭을 키우고 팔꿈치를 굽힘)           # track.py 출력에서 고른 번호들
 T = json.load(open("tracks.json"))
 SW = [(11,12),(13,14),(15,16),(23,24),(25,26),(27,28),(29,30),(31,32)]
 J = [11,12,13,14,15,16,23,24,25,26,27,28]
@@ -32,12 +34,12 @@ for ti in TRACKS:
     for i in range(1, n):                                   # 좌우 뒤바뀜 1차 보정(연속성)
         if np.linalg.norm(swap(W[i])[J]-W[i-1][J]) < np.linalg.norm(W[i][J]-W[i-1][J]): W[i] = swap(W[i])
     hipC = (W[:,23]+W[:,24])/2; shC = (W[:,11]+W[:,12])/2
-    u = (shC-hipC).mean(0); u /= np.linalg.norm(u)
+    u = np.array([0,-1.0,0]) if LEVEL_CAMERA else unit((shC-hipC).mean(0))   # 수평으로 찍은 영상이면 화면 위쪽이 곧 수직
     A = np.concatenate([W[:,27]-hipC, W[:,28]-hipC]); A = A - np.outer(A@u, u)
     f = np.linalg.svd(A - A.mean(0))[2][0]; f -= u*np.dot(f,u); f /= np.linalg.norm(f)
     votes = [np.dot((W[:,0]-shC).mean(0), f), np.dot((W[:,31]-W[:,29]).mean(0)+(W[:,32]-W[:,30]).mean(0), f)]
     if votes[0] < 0: f = -f
-    th = np.radians(float(LEAN)) if (LEAN := 14) else 0
+    th = 0 if LEVEL_CAMERA else np.radians(14)             # 위에서 내려다본 영상은 몸통 숙임을 14도로 가정
     u, f = np.cos(th)*u - np.sin(th)*f, np.cos(th)*f + np.sin(th)*u
     r = np.cross(f, u)
     if np.dot((W[:,24]-W[:,23]).mean(0), r) < 0: W = np.array([swap(w) for w in W])
@@ -46,7 +48,7 @@ for ti in TRACKS:
     # 걸음 박자 찾기. MediaPipe가 좌우를 자주 헷갈리므로 좌우와 무관한 "두 발목의 앞뒤 간격"으로 맞춘다:
     #   sep ≈ a + b·cos(2π(t−t0)/Th),  Th = 반 사이클(한 걸음) 길이
     best = (-9, 0, 0)
-    for Th in np.arange(4.0, 9.01, 0.05):
+    for Th in np.arange(4.0, 12.01, 0.05):
         for t0 in np.arange(0, Th, 0.1):
             c = np.corrcoef(sep, np.cos(2*np.pi*(t-t0)/Th))[0,1]
             if c > best[0]: best = (c, Th, t0)
@@ -87,7 +89,7 @@ sm = sum(np.roll(cyc, s, 0)*w for s, w in zip((-1,0,1), k))
 ARM_GAIN, ELBOW_MIN = 2.0, 1.25
 def ang(v): return np.arctan2(v[0], -v[1])                  # 아래 방향 기준, 앞쪽이 +
 RB = np.array([rebuild(P) for P in sm])
-for s_, e, w in ((11,13,15),(12,14,16)):
+for s_, e, w in ((11,13,15),(12,14,16)) if ARM_FIX else ():
     up_a = np.array([ang(P[e]-P[s_]) for P in RB]); fo_a = np.array([ang(P[w]-P[e]) for P in RB])
     m = up_a.mean(); new_up = np.clip(m*0.3 + (up_a-m)*ARM_GAIN, -1.1, 1.0)
     bend = np.maximum(fo_a-up_a, ELBOW_MIN) + 0.25*np.maximum(0, new_up)
