@@ -127,6 +127,7 @@ const CONFIG = {
             stretch: 0.45, range: 22, maxStretch: 8,       // 공 쪽으로 늘어나는 탄성: 세기, 영향 거리, 최대 거리
             mark: 0.55, markRange: 12, runs: 7, shift: 1.2 },   // mark: 상대에게 붙는 정도, runs: 공격 때 침투 거리, shift: 공수 전환 때 대형이 바뀌는 빠르기
   receive: { assist: 0.6, react: 0.2 },   // 공 받기 도움: assist = 조이스틱을 쓰는 중에도 받는 위치 쪽으로 끌어 주는 정도(0 = 안 끌어 줌, 1 = 강하게), react = 출발까지 걸린다고 보는 시간(초)
+  dribble: { rest: 0.62, push: 1.0, lead: 1.25, gap: 0.3, turnLead: 1.08, turnGap: 0.08, walk: 1.5, reach: 1.9, lose: 4.5 },   // 드리블: rest = 발 앞 공 위치(m), push·lead = 툭 찰 때 공 속도(= 선수 속도×lead + push), gap = 터치 사이 최소 간격(초), turnLead·turnGap = 방향을 틀 때의 짧은 터치, walk = 이보다 느리면 공을 발 앞에 붙여 둠, reach = 발이 닿아 공 방향을 바꿀 수 있는 거리, lose = 공이 이보다 멀어지면 소유를 잃음
   autoSwitch: { every: 0.12, margin: 1.5 },   // 패스 중 자동 선수 전환: 검사 주기(초), 이만큼(m) 더 가까워야 전환
   player: { speed: 10.5, dribble: 0.9, accel: 7, cpuSpeed: 0.93, control: 1.35, controlHeight: 1.6 },   // control: 이 거리 안에 공이 오면 받는다, controlHeight: 이 높이 아래의 공만
   charge: { time: 0.9, min: 0.1, tap: 0.2, pressTime: 1.5 },   // 100%까지 걸리는 시간, 이보다 짧으면 '한 번 누름', 압박 지속 시간
@@ -250,7 +251,7 @@ function slide(p){
 
 /* ===== 킥 ===== */
 function doKick(p,vx,vy,vz,power){
-  if (ball.owner===p){ ball.x=p.x+Math.cos(p.a)*0.6; ball.z=p.z+Math.sin(p.a)*0.6; ball.y=p.gk?0.4:BR; }
+  if (ball.owner===p && (p.gk || dist(p,ball)>1.8*CONFIG.size.player)){ ball.x=p.x+Math.cos(p.a)*0.6; ball.z=p.z+Math.sin(p.a)*0.6; ball.y=p.gk?0.4:BR; }   // 드리블 중엔 공이 있는 자리에서 그대로 찬다
   ball.owner=null; ball.vx=vx; ball.vy=vy; ball.vz=vz; ball.last=p.team;
   if (p.gk && S.ctrl===p) switchPlayer();
   p.cool=0.45; p.kickT=0.28; p.a=Math.atan2(vz,vx); p.hold=0;
@@ -353,10 +354,32 @@ function possession(dt){
 /* ===== 공 물리 / 규칙 ===== */
 function stepBall(dt){
   const px=ball.x, pz=ball.z, o=ball.owner, c=CONFIG.ball;
-  if (o){
-    const f=o.gk?0.3:0.5+0.22*Math.abs(Math.sin(o.ph)), k=Math.min(1,dt*18);
-    ball.x+=(o.x+Math.cos(o.a)*f-ball.x)*k; ball.z+=(o.z+Math.sin(o.a)*f-ball.z)*k;
-    ball.y=o.gk?1.05*CONFIG.size.player:BR; ball.vx=o.vx; ball.vz=o.vz; ball.vy=0; ball.spin+=hyp(o.vx,o.vz)*dt*4;
+  if (o && o.gk){                                           // 골키퍼는 손에 들고 있음
+    const k=Math.min(1,dt*18);
+    ball.x+=(o.x+Math.cos(o.a)*0.3-ball.x)*k; ball.z+=(o.z+Math.sin(o.a)*0.3-ball.z)*k;
+    ball.y=1.05*CONFIG.size.player; ball.vx=o.vx; ball.vz=o.vz; ball.vy=0;
+  } else if (o){                                            // 드리블: 공을 발 앞에 두고, 가까워지면 툭 차서 앞으로 굴린다
+    const d=CONFIG.dribble, K=CONFIG.size.player, fx=Math.cos(o.a), fz=Math.sin(o.a), sp=hyp(o.vx,o.vz);
+    const rx=ball.x-o.x, rz=ball.z-o.z, ahead=rx*fx+rz*fz, side=-rx*fz+rz*fx, rest=d.rest*K;
+    o.touchT=(o.touchT||0)-dt;
+    if (sp<d.walk){                                         // 거의 서 있을 때: 발 앞 제자리로 부드럽게 끌어옴
+      const k=Math.min(1,dt*8); ball.x+=(o.x+fx*rest-ball.x)*k; ball.z+=(o.z+fz*rest-ball.z)*k; ball.vx=o.vx; ball.vz=o.vz;
+    } else {
+      const v=hyp(ball.vx,ball.vz);                         // 차 놓은 공은 실제 공처럼 굴러가며 느려짐
+      if (v>0){ const nv=Math.max(0,v-(c.roll*v+c.rollFlat)*dt); ball.vx*=nv/v; ball.vz*=nv/v; }
+      ball.x+=ball.vx*dt; ball.z+=ball.vz*dt;
+      const dd=hyp(rx,rz), bv=hyp(ball.vx,ball.vz), along=bv>0.3?(ball.vx*fx+ball.vz*fz)/bv:1;
+      // 툭 차는 순간: 발 앞까지 따라잡았을 때, 공이 옆으로 빠질 때, 방향을 틀어서 공이 다른 쪽으로 굴러갈 때 (발이 닿는 거리 안에서만)
+      const turning=along<0.8 || Math.abs(side)>0.5*K;        // 방향을 틀어 공이 다른 쪽으로 가는 중: 간격을 기다리지 않고 바로 다시 터치
+      if (dd<d.reach*K && ((o.touchT<=0 && ahead<rest+0.12*K) || (o.touchT<=d.gap-d.turnGap && turning))){
+        if (ahead<rest && dd<rest*1.6){ ball.x=o.x+fx*rest+(-fz)*side*0.5; ball.z=o.z+fz*rest+fx*side*0.5; }   // 몸 안으로 파고들지 않게 발 앞에서 차기
+        const push=turning ? sp*d.turnLead+d.push*0.5 : sp*d.lead+d.push;   // 방향 전환 터치는 짧게
+        ball.vx=fx*push; ball.vz=fz*push; o.touchT=d.gap; o.touchFoot=-(o.touchFoot||1);
+        sfx.kick(0.15);
+      }
+      if (hyp(rx,rz)>d.lose){ ball.owner=null; ball.last=o.team; S.poss=-1; }   // 너무 멀리 차 버리면 소유를 잃음(누구나 다시 잡을 수 있음)
+    }
+    ball.y=BR; ball.vy=0; ball.spin+=hyp(ball.vx,ball.vz)*dt*4;
   } else {
     ball.vy-=c.g*dt; ball.x+=ball.vx*dt; ball.y+=ball.vy*dt; ball.z+=ball.vz*dt;
     const sp=hyp(ball.vx,ball.vz);
