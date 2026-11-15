@@ -122,7 +122,10 @@ const CONFIG = {
   size:   { player: 1.28, ball: 1.875, goalHalfWidth: 4.7, goalHeight: 3.1, pitch: 1.25 },   // 화면에 보이는 선수·공 크기 배율, 골대 반폭·높이(m), pitch: 경기장 크기 배율(1 = 105×68m)
   pose:   { useVideoRun: true, blend: 1.6, rate: 1 },   // useVideoRun: 영상에서 뽑은 달리기 동작 사용(false면 기존 계산 동작), blend: 클수록 느린 속도에서도 달리기 자세가 강하게, rate: 달리기 동작 재생 빠르기(1 = 원래, 2 = 2배)
   gfx:    { shadows: true, shadowMap: 2048, maxPixelRatio: 2 },   // 느린 기기에서는 shadows:false, maxPixelRatio:1 로
-  shape:  { leash: 22, wobble: 1.2, followBall: 0.2 },   // 대형 유지: leash = 자기 자리에서 이 거리(m) 안의 공만 쫓아 나감, wobble = 제자리에서 어슬렁거리는 폭, followBall = 공 쪽(좌우)으로 대형이 쏠리는 정도
+  shape:  { leash: 22, wobble: 1.2, followBall: 0.2,       // leash: 두 번째 수비가 도우러 나가는 거리, wobble: 제자리 어슬렁 폭, followBall: 대형이 공 쪽(좌우)으로 쏠리는 정도
+            depth: 6, compact: 0.8, spread: 1.1,           // depth: 공격/수비 때 앞뒤로 늘고 주는 거리, compact·spread: 수비/공격 때 좌우 폭 배율
+            stretch: 0.45, range: 22, maxStretch: 8,       // 공 쪽으로 늘어나는 탄성: 세기, 영향 거리, 최대 거리
+            mark: 0.55, markRange: 12, runs: 7, shift: 1.2 },   // mark: 상대에게 붙는 정도, runs: 공격 때 침투 거리, shift: 공수 전환 때 대형이 바뀌는 빠르기
   autoSwitch: { every: 0.12, margin: 1.5 },   // 패스 중 자동 선수 전환: 검사 주기(초), 이만큼(m) 더 가까워야 전환
   player: { speed: 10.5, dribble: 0.9, accel: 7, cpuSpeed: 0.93, control: 1.35, controlHeight: 1.6 },   // control: 이 거리 안에 공이 오면 받는다, controlHeight: 이 높이 아래의 공만
   charge: { time: 0.9, min: 0.1, tap: 0.2, pressTime: 1.5 },   // 100%까지 걸리는 시간, 이보다 짧으면 '한 번 누름', 압박 지속 시간
@@ -424,12 +427,26 @@ function autoSwitch(dt){
   if (!best || best===c) return;
   if (c.gk || c.cool>0 || bd+CONFIG.autoSwitch.margin<reach(c)){ S.ctrl=best; if (S.recv[0]) S.recv[0]=best; }
 }
+// 탄력적인 대형: 각 선수는 자기 자리(home)에 고무줄로 묶인 것처럼 움직인다.
+//   공격할 땐 넓고 깊게 펼치고, 수비할 땐 좁고 촘촘하게 모이며, 공·상대가 가까우면 그쪽으로 늘어났다가 멀어지면 되돌아온다.
+const ATT=[0.5,0.5];                                       // 팀별 공격 정도 0(수비)~1(공격). 공 소유가 바뀌면 서서히 변해 대형이 부드럽게 바뀐다
 function formation(p){
-  const k=p.role==="DF"?0.45:p.role==="MF"?0.5:0.52;
-  let lx=clamp(p.hx+(ball.x*p.dir+HL)*k+(S.poss===p.team?4:-2), -HL+4.5, HL-5.5);
-  if (S.poss!==p.team && p.role!=="FW") lx=Math.max(-HL+7, Math.min(lx, ball.x*p.dir-(p.role==="DF"?4:-6)));   // 공을 뺏겼을 때: 수비 줄은 공보다 골대 쪽에, 미드필더 줄도 공 뒤로 따라 내려온다
-  const c=CONFIG.shape;                                    // 같은 줄(수비·미드·공격)은 같은 비율로 움직여 일자 대형이 유지된다
-  return [lx*p.dir+Math.cos(S.time*0.3+p.i)*c.wobble, clamp(p.hz*(1-c.followBall*0.6)+ball.z*c.followBall+Math.sin(S.time*0.4+p.i*1.7)*c.wobble, -HW+1, HW-1)];
+  const c=CONFIG.shape, att=ATT[p.team], k=p.role==="DF"?0.45:p.role==="MF"?0.5:0.52;
+  const push=p.role==="DF"?c.depth*0.3:p.role==="MF"?c.depth*0.7:c.depth;                 // 공격 땐 앞줄일수록 더 전진, 수비 땐 더 내려옴
+  let lx=clamp(p.hx+(ball.x*p.dir+HL)*k+push*(att*2-1), -HL+4.5, HL-5.5);
+  if (att<0.5 && p.role!=="FW") lx=Math.max(-HL+7, Math.min(lx, ball.x*p.dir-(p.role==="DF"?4:-6)));   // 수비 중: 수비 줄은 공보다 골대 쪽, 미드필더 줄도 공 뒤로
+  const wide=c.compact+(c.spread-c.compact)*att;                                          // 좌우 폭: 수비 0.8배 ↔ 공격 1.1배
+  let x=lx*p.dir, z=p.hz*wide*(1-c.followBall*0.6)+ball.z*c.followBall;
+  // 공 쪽으로 늘어남: 가까울수록 많이, 최대 maxStretch 까지
+  let dx=ball.x-x, dz=ball.z-z, d=hyp(dx,dz)||1, pull=Math.min(c.maxStretch, d*c.stretch*Math.exp(-d/c.range));
+  x+=dx/d*pull; z+=dz/d*pull;
+  if (att<0.5 && p.role!=="FW"){                           // 수비 중: 자기 구역에 들어온 상대 쪽으로 붙는다(골대 쪽에서)
+    const [od,o]=nearestOpp(p,x,z);
+    if (o && od<c.markRange){ const m=c.mark*(1-att*2)*(1-od/c.markRange); x+=(o.x-p.dir*1.5-x)*m; z+=(o.z-z)*m; }
+  } else if (att>0.5 && p.role!=="DF"){                    // 공격 중: 앞쪽 선수들이 번갈아 침투했다 돌아온다
+    x+=p.dir*c.runs*(att*2-1)*Math.max(0,Math.sin(S.time*0.55+p.i*2.1));
+  }
+  return [clamp(x+Math.cos(S.time*0.3+p.i)*c.wobble,-HL+3,HL-3), clamp(z+Math.sin(S.time*0.4+p.i*1.7)*c.wobble, -HW+1, HW-1)];
 }
 function nearestOpp(p,x,z){
   let bd=1e9, bq=null;
@@ -542,6 +559,7 @@ function steer(p,wx,wz,dt){
   p.run=(p.run||0)+(Math.min(1,sp/(CONFIG.player.speed*1.03))-(p.run||0))*Math.min(1,dt*9);   // 달리기 동작을 부드럽게 섞는 값
 }
 function stepPlayers(dt){
+  for (let t=0;t<2;t++) ATT[t]+=((S.poss===t?1:S.poss<0?0.5:0)-ATT[t])*Math.min(1,CONFIG.shape.shift*dt);
   const near=[[],[]];
   for (let t=0;t<2;t++){
     const cand=players.filter(p=>p.team===t && !p.gk && !(t===0 && p===S.ctrl) && p.stun<=0);
