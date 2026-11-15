@@ -127,7 +127,7 @@ const CONFIG = {
             stretch: 0.45, range: 22, maxStretch: 8,       // 공 쪽으로 늘어나는 탄성: 세기, 영향 거리, 최대 거리
             mark: 0.55, markRange: 12, runs: 7, shift: 1.2 },   // mark: 상대에게 붙는 정도, runs: 공격 때 침투 거리, shift: 공수 전환 때 대형이 바뀌는 빠르기
   receive: { assist: 0.6, react: 0.2 },   // 공 받기 도움: assist = 조이스틱을 쓰는 중에도 받는 위치 쪽으로 끌어 주는 정도(0 = 안 끌어 줌, 1 = 강하게), react = 출발까지 걸린다고 보는 시간(초)
-  dribble: { radius: 0.34, min: 0.32, gap: 0.22, turnGap: 0.16, walk: 1.5 },   // 드리블: radius = 공이 머무는 원의 반지름(선수 키의 몇 배, 그림 기준 0.34), min = 발 앞 최소 거리(m), gap = 터치 사이 최소 간격(초), turnGap = 방향 틀 때 다시 터치하기까지 걸리는 최소 시간(초), walk = 이보다 느리면 공을 발 앞에 붙여 둠
+  dribble: { radius: 0.34, min: 0.32, gap: 0.22, turnGap: 0.16, walk: 1.5, anim: 0.26 },   // 드리블: radius = 공이 머무는 원의 반지름(선수 키의 몇 배, 그림 기준 0.34), min = 발 앞 최소 거리(m), gap = 터치 사이 최소 간격(초), turnGap = 방향 틀 때 다시 터치하기까지 걸리는 최소 시간(초), walk = 이보다 느리면 공을 발 앞에 붙여 둠, anim = 터치할 때 발 내미는 동작 길이(초)
   autoSwitch: { every: 0.12, margin: 1.5 },   // 패스 중 자동 선수 전환: 검사 주기(초), 이만큼(m) 더 가까워야 전환
   player: { speed: 10.5, dribble: 0.9, accel: 7, cpuSpeed: 0.93, control: 1.35, controlHeight: 1.6 },   // control: 이 거리 안에 공이 오면 받는다, controlHeight: 이 높이 아래의 공만
   charge: { time: 0.9, min: 0.1, tap: 0.2, pressTime: 1.5 },   // 100%까지 걸리는 시간, 이보다 짧으면 '한 번 누름', 압박 지속 시간
@@ -374,7 +374,7 @@ function stepBall(dt){
         if (ahead<minA){ ball.x=o.x+fx*minA+(-fz)*side*0.5; ball.z=o.z+fz*minA+fx*side*0.5; }   // 몸 안으로 파고들지 않게 발 앞에서 차기
         // 툭 차는 세기: 굴러가며 느려지는 것을 계산해서, 공이 원 끝(R)까지만 나갔다가 다시 발로 돌아오게
         const decel=c.roll*sp+c.rollFlat, gain=Math.max(0.05,R-minA-0.04)*(turning?0.6:1), push=sp+Math.sqrt(2*decel*gain);
-        ball.vx=fx*push; ball.vz=fz*push; o.touchT=d.gap; o.touchFoot=-(o.touchFoot||1);
+        ball.vx=fx*push; ball.vz=fz*push; o.touchT=d.gap; o.touchFoot=-(o.touchFoot||1); o.touchAt=S.time; o.touchAhead=Math.max(minA,ahead)/K; o.touchSide=clamp(side,-R,R)/K;
         sfx.kick(0.12);
       }
       const nx=ball.x-o.x, nz=ball.z-o.z, nd=hyp(nx,nz);   // 원 밖으로는 절대 나가지 않게
@@ -828,12 +828,30 @@ function updatePose(p){
   const lm=p.lm||(p.lm=newPose()), run=p.run||0;
   const special=p.kickT>0||p.slideT>0||(p.gk&&(p.dive>0||ball.owner===p))||(S.scorer===p.team&&S.dead);
   const cRun=POSE_CLIPS.run, cIdle=POSE_CLIPS.idle;
-  if (special||(!cRun&&!cIdle)) return poseProcedural(p,lm);
+  if (special||(!cRun&&!cIdle)){ poseProcedural(p,lm); if (!special) touchPose(p,lm); return; }
   // 포즈 데이터 재생: 달리기는 걸음 위상(p.ph)에 맞춰, 서 있기는 시간에 맞춰 재생하고 속도에 따라 둘을 섞는다
   if (cRun) samplePose(cRun,p.ph/(Math.PI*2),tmpA); else { const r=p.run; p.run=1; poseProcedural(p,tmpA); p.run=r; }
   if (cIdle) samplePose(cIdle,(S.time+p.i*0.37)*cIdle.fps/cIdle.frames.length,tmpB); else { const r=p.run; p.run=0; poseProcedural(p,tmpB); p.run=r; }
   const w=sm(run*CONFIG.pose.blend);
   for (let k=0;k<33;k++) for (let c=0;c<3;c++) lm[k][c]=tmpB[k][c]+(tmpA[k][c]-tmpB[k][c])*w;
+  touchPose(p,lm);
+}
+// 드리블 터치 동작: 공을 툭 차는 순간 한쪽 발을 공 쪽으로 내밀었다가 원래 걸음으로 돌아온다
+//   엉덩이는 그대로 두고, 무릎·발목은 두 관절 IK(허벅지·정강이 길이 고정)로 공 바로 뒤에 발이 오게 계산해서 섞는다
+function touchPose(p,lm){
+  if (p.touchAt===undefined) return;
+  const T=CONFIG.dribble.anim, t=S.time-p.touchAt; if (t<0 || t>T) return;
+  const peak=T*0.3, w=t<peak ? sm(t/peak) : 1-sm((t-peak)/(T-peak));                   // 빠르게 내밀고 천천히 돌아옴
+  const R=p.touchFoot>0?1:0, H=lm[LM.L_HIP+R], L1=0.44, L2=0.44;
+  const tx=p.touchAhead*1.15+0.05, ty=0.2, tz=p.touchSide*0.6+(R?0.05:-0.05);          // 공이 있던 자리까지 발을 쭉 뻗음(발목은 살짝 들림)
+  let dx=tx-H[0], dy=ty-H[1], dz=tz-H[2], d=Math.hypot(dx,dy,dz); const dm=L1+L2-0.01;
+  if (d>dm){ dx*=dm/d; dy*=dm/d; dz*=dm/d; d=dm; }
+  const ux=dx/d, uy=dy/d, uz=dz/d;
+  let nx=1-ux*ux, ny=-ux*uy, nz=-ux*uz; const nl=Math.hypot(nx,ny,nz)||1; nx/=nl; ny/=nl; nz/=nl;    // 무릎은 앞쪽으로 굽힘
+  const a=(L1*L1-L2*L2+d*d)/(2*d), h=Math.sqrt(Math.max(0,L1*L1-a*a));
+  const knee=[H[0]+ux*a+nx*h, H[1]+uy*a+ny*h, H[2]+uz*a+nz*h], ank=[H[0]+dx, H[1]+dy, H[2]+dz];
+  const goal={ [LM.L_KNEE+R]:knee, [LM.L_ANKLE+R]:ank, [LM.L_HEEL+R]:[ank[0]-0.06,ank[1]-0.05,ank[2]], [LM.L_FOOT+R]:[ank[0]+0.15,ank[1]-0.04,ank[2]] };
+  for (const k in goal) for (let c=0;c<3;c++) lm[k][c]+=(goal[k][c]-lm[k][c])*w;
 }
 
 // 기본 동작: 달리기·킥·슬라이딩·다이빙을 계산해서 33개 관절 위치를 채운다
