@@ -97,19 +97,20 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
 /* ===== 조정값: 여기 숫자만 바꿔서 느낌을 튜닝하세요 (거리 m, 속도 m/s, 시간 초) ===== */
 const CONFIG = {
   matchSeconds: 240,                       // 실제 플레이 시간(전·후반 합계) → 화면 시계 90분
+  size:   { player: 1.28, ball: 1.25, goalHalfWidth: 4.7, goalHeight: 3.1 },   // 화면에 보이는 선수·공 크기 배율, 골대 반폭·높이(m)
   autoSwitch: { every: 0.12, margin: 1.5 },   // 패스 중 자동 선수 전환: 검사 주기(초), 이만큼(m) 더 가까워야 전환
   player: { speed: 7.0, dribble: 0.9, accel: 7, cpuSpeed: 0.93, control: 0.9 },
   charge: { time: 0.9, min: 0.1, tap: 0.2, pressTime: 1.5 },   // 100%까지 걸리는 시간, 이보다 짧으면 '한 번 누름', 압박 지속 시간
   pass:   { min: 9, max: 25, wantMin: 8, wantMax: 38, angle: 60 },      // 땅볼 패스 속도, 강도별 목표 거리
-  shot:   { min: 17, max: 32, liftBase: 1.5, liftPow: 5.5, error: 0.03, errorPow: 0.07, aimWidth: 3.4 },
+  shot:   { min: 17, max: 32, liftBase: 1.5, liftPow: 5.5, error: 0.03, errorPow: 0.07, aimWidth: 4.2 },
   cross:  { min: 14, max: 48, angle: 38, assist: 35 },                   // 비거리, 발사각(도), 조준 보정각(도)
   ball:   { g: 9.8, bounce: 0.55, roll: 0.5, rollFlat: 1.2, air: 0.12 },
   tackle: { user: 3.0, cpu: 1.2, slideSpeed: 9, slideTime: 0.55 },       // 초당 공 뺏기 확률
-  gk:     { speed: 5, dive: 6.5, reach: 1.15, reactMin: 0.14, reactMax: 0.3, catch: 0.7, hold: 1.1, userHold: 8, carry: 4, punt: [28, 62] },   // userHold: 내 골키퍼가 공을 들고 있을 수 있는 시간, carry: 들고 걷는 속도, punt: 슛 버튼 롱킥 거리
-  cpu:    { think: 0.3, shootRange: 20, passUrge: 0.1, shotError: 0.1 },
+  gk:     { speed: 5, dive: 6.0, reach: 1.1, reactMin: 0.17, reactMax: 0.33, catch: 0.6, hold: 1.1, userHold: 8, carry: 4, punt: [28, 62] },   // userHold: 내 골키퍼가 공을 들고 있을 수 있는 시간, carry: 들고 걷는 속도, punt: 슛 버튼 롱킥 거리
+  cpu:    { think: 0.3, shootRange: 20, passUrge: 0.1, shotError: 0.15 },
   cam:    { h: 24, back: 40, pitch: 33, zoom: 1.2, follow: 2.6, yaw: 30, lead: 0.3 },   // 높이, 뒤로 거리, 내려보는 각(도), 확대, 따라가는 속도, 골대 쪽으로 도는 각(도), 공 진행방향 미리보기(초)
 };
-const HL = 52.5, HW = 34, GW = 3.66, GH = 2.44, BR = 0.11;
+const HL = 52.5, HW = 34, GW = CONFIG.size.goalHalfWidth, GH = CONFIG.size.goalHeight, BR = 0.11;
 const FORM = [[-50,0,"GK"],[-34,-21,"DF"],[-37,-7,"DF"],[-37,7,"DF"],[-34,21,"DF"],
               [-18,-14,"MF"],[-22,0,"MF"],[-18,14,"MF"],[-4,-20,"FW"],[-2,0,"FW"],[-4,20,"FW"]];
 const KIT = [{shirt:"#2f6bff",shorts:"#ffffff",sock:"#2f6bff",gk:"#f2c230"},
@@ -260,7 +261,7 @@ function userKick(p,type,power){
       const v=c.min+(c.max-c.min)*power; doKick(p,ax*v,c.liftBase+c.liftPow*power*power,az*v,power);
     } else {
       const gkp=players[(1-p.team)*11];
-      const tz=aimed?clamp(az*5,-c.aimWidth,c.aimWidth):(gkp.z>0?-2.6:2.6);
+      const tz=aimed?clamp(az*5,-c.aimWidth,c.aimWidth):(gkp.z>0?-1:1)*GW*0.72;
       shootAt(p,tz,power,c.error+c.errorPow*power);
     }
   } else {
@@ -318,7 +319,7 @@ function stepBall(dt){
   if (o){
     const f=o.gk?0.3:0.5+0.22*Math.abs(Math.sin(o.ph)), k=Math.min(1,dt*18);
     ball.x+=(o.x+Math.cos(o.a)*f-ball.x)*k; ball.z+=(o.z+Math.sin(o.a)*f-ball.z)*k;
-    ball.y=o.gk?1.05:BR; ball.vx=o.vx; ball.vz=o.vz; ball.vy=0; ball.spin+=hyp(o.vx,o.vz)*dt*4;
+    ball.y=o.gk?1.05*CONFIG.size.player:BR; ball.vx=o.vx; ball.vz=o.vz; ball.vy=0; ball.spin+=hyp(o.vx,o.vz)*dt*4;
   } else {
     ball.vy-=c.g*dt; ball.x+=ball.vx*dt; ball.y+=ball.vy*dt; ball.z+=ball.vz*dt;
     const sp=hyp(ball.vx,ball.vz);
@@ -408,7 +409,7 @@ function cpuThink(p){
   const gx=HL*p.dir, dG=hyp(gx-p.x,p.z), c=CONFIG.cpu;
   const [pr]=nearestOpp(p,p.x,p.z), toLine=HL-p.x*p.dir;
   if (dG<c.shootRange && Math.abs(p.z)<17 && (dG<12 || Math.random()<0.45)){
-    const gkp=players[(1-p.team)*11]; return shootAt(p,(gkp.z>0?-1:1)*rnd(1.5,3.2),rnd(0.5,0.85),c.shotError);
+    const gkp=players[(1-p.team)*11]; return shootAt(p,(gkp.z>0?-1:1)*rnd(GW*0.25,GW*0.8),rnd(0.5,0.85),c.shotError);
   }
   if (toLine<14 && Math.abs(p.z)>15 && Math.random()<0.5){
     let m=null, bd=1e9;
@@ -474,7 +475,7 @@ function stepGk(p,dt){
     const t=(p.x-ball.x)/ball.vx;
     if (t>0 && t<1.4){
       const zp=ball.z+ball.vz*t, yp=ball.y+ball.vy*t-4.9*t*t;
-      if (Math.abs(zp)<5.5 && yp<3.2){
+      if (Math.abs(zp)<GW+1.8 && yp<GH+0.8){
         shot=true;
         if (p.rt===null) p.rt=rnd(c.reactMin,c.reactMax);
         p.rt-=dt;
@@ -490,7 +491,7 @@ function stepGk(p,dt){
   if (tx===undefined){
     const inBox=Math.abs(ball.x-gx)<16.5 && Math.abs(ball.z)<20;
     if (!ball.owner && inBox && hyp(ball.vx,ball.vz)<9 && dist(p,ball)<nearestOpp(p,ball.x,ball.z)[0]+1){ tx=ball.x; tz=ball.z; sp=6.5; }
-    else { const dx=ball.x-gx, dz=ball.z, d=hyp(dx,dz)||1, r=clamp(d*0.12,1.2,5.5); tx=gx+dx/d*r; tz=clamp(dz/d*r,-3.4,3.4); }
+    else { const dx=ball.x-gx, dz=ball.z, d=hyp(dx,dz)||1, r=clamp(d*0.12,1.2,5.5); tx=gx+dx/d*r; tz=clamp(dz/d*r,-GW+0.3,GW-0.3); }
   }
   moveTo(p,tx,tz,sp,dt);
   if (hyp(p.vx,p.vz)<1.5) p.a=Math.atan2(ball.z-p.z,ball.x-p.x);
@@ -681,10 +682,11 @@ function drawWorld(){
     ctx.lineCap="butt";
   }
 }
+let LK=1;
 const OUTLINE="rgba(10,24,16,.5)";
 function limb(a,b,wm,color){                              // 테두리가 있는 둥근 팔다리
   if (!a||!b) return;
-  const lw=Math.max(1.5,wm*(a.s+b.s)/2);
+  const lw=Math.max(1.5,wm*LK*(a.s+b.s)/2);
   ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
   ctx.lineWidth=lw+1.6; ctx.strokeStyle=OUTLINE; ctx.stroke();
   ctx.lineWidth=lw; ctx.strokeStyle=color; ctx.stroke();
@@ -702,7 +704,8 @@ function drawPlayer(p){
   if (diving){ const k=(0.55-p.dive)/0.55, d=p.diveDir*1.25*sm(k*3); ux=0; uy=Math.cos(d); uz=Math.sin(d); baseY=0.4*Math.sin(Math.min(1,k)*Math.PI); }
   const bob=0.05*run*Math.abs(Math.sin(p.ph))+(1-run)*Math.sin(S.time*2.2+p.i)*0.008;
   const hipH=0.9-0.04*run+bob, tw=Math.sin(p.ph)*0.3*run, L=0.44;
-  const P=(al,h,sd)=>proj(p.x+fx*al+ux*h+sx*sd, baseY+uy*h, p.z+fz*al+uz*h+sz*sd);
+  const K=LK=CONFIG.size.player;
+  const P=(al,h,sd)=>proj(p.x+(fx*al+ux*h+sx*sd)*K, (baseY+uy*h)*K, p.z+(fz*al+uz*h+sz*sd)*K);
   const leg=s=>{
     const ph=s>0?p.ph:p.ph+Math.PI, ha=s*0.115*Math.sin(tw), hs=s*0.115*Math.cos(tw);
     let t=0.06*run+Math.sin(ph)*(0.05+0.95*run), b=0.1+0.25*run+1.7*run*Math.pow(Math.max(0,Math.cos(ph)),1.2);
@@ -733,7 +736,7 @@ function drawPlayer(p){
   limb(P(0,hipH+0.16,0),P(0,shH-0.06,0),0.3,shirt); limb(sL,sR,0.13,shirt);
   if (sL&&sR&&hL&&hR){ ctx.fillStyle=shirt; ctx.beginPath(); ctx.moveTo(sL.x,sL.y); ctx.lineTo(sR.x,sR.y); ctx.lineTo(hR.x,hR.y); ctx.lineTo(hL.x,hL.y); ctx.fill(); }
   const head=P(0.02,hipH+0.77,0), face=P(0.075,hipH+0.76,0);
-  if (head&&face){ const r=Math.max(2.3,0.12*head.s);
+  if (head&&face){ const r=Math.max(2.3,0.12*K*head.s);
     limb(P(0,shH,0),head,0.09,p.skin);
     ctx.fillStyle=OUTLINE; ctx.beginPath(); ctx.arc(head.x,head.y,r+0.8,0,7); ctx.fill();
     ctx.fillStyle=HAIR[(p.i*3+p.team)%HAIR.length]; ctx.beginPath(); ctx.arc(head.x,head.y,r,0,7); ctx.fill();
@@ -742,7 +745,7 @@ function drawPlayer(p){
 }
 function drawBall(){
   const b=proj(ball.x,ball.y,ball.z); if (!b) return;
-  const r=Math.max(2.8,0.13*b.s), g=ctx.createRadialGradient(b.x-r*0.35,b.y-r*0.4,r*0.1,b.x,b.y,r);
+  const r=Math.max(2.8,0.13*CONFIG.size.ball*b.s), g=ctx.createRadialGradient(b.x-r*0.35,b.y-r*0.4,r*0.1,b.x,b.y,r);
   g.addColorStop(0,"#ffffff"); g.addColorStop(0.7,"#eceef2"); g.addColorStop(1,"#aeb4c2");
   ctx.fillStyle=OUTLINE; ctx.beginPath(); ctx.arc(b.x,b.y,r+0.8,0,7); ctx.fill();
   ctx.fillStyle=g; ctx.beginPath(); ctx.arc(b.x,b.y,r,0,7); ctx.fill();
@@ -755,15 +758,15 @@ function drawEntities(){
   list.sort((a,b)=>b._d-a._d);
   for (const e of list){                                  // 부드러운 그림자 먼저
     const isB=e===ball, g=proj(e.x+(isB?ball.y*0.25:0.12),0,e.z+(isB?ball.y*0.1:0.05)); if (!g) continue;
-    const k=isB?Math.max(0.45,1-ball.y*0.07):1, rx=(isB?0.17:0.42)*g.s*k, ry=(isB?0.08:0.19)*g.s*k;
+    const k=isB?Math.max(0.45,1-ball.y*0.07):1, rx=(isB?0.17*CONFIG.size.ball:0.42*CONFIG.size.player)*g.s*k, ry=rx*0.46;
     ctx.fillStyle="rgba(0,20,8,.16)"; ctx.beginPath(); ctx.ellipse(g.x,g.y,rx*1.35,ry*1.35,0,0,7); ctx.fill();
     ctx.fillStyle="rgba(0,20,8,.24)"; ctx.beginPath(); ctx.ellipse(g.x,g.y,rx,ry,0,0,7); ctx.fill();
   }
   const c=S.ctrl, g=c&&proj(c.x,0,c.z);
-  if (g){ ctx.strokeStyle="rgba(255,216,74,.95)"; ctx.lineWidth=Math.max(2,0.07*g.s); ctx.beginPath(); ctx.ellipse(g.x,g.y,0.62*g.s,0.28*g.s,0,0,7); ctx.stroke(); }
+  if (g){ ctx.strokeStyle="rgba(255,216,74,.95)"; ctx.lineWidth=Math.max(2,0.07*g.s); ctx.beginPath(); ctx.ellipse(g.x,g.y,0.62*CONFIG.size.player*g.s,0.28*CONFIG.size.player*g.s,0,0,7); ctx.stroke(); }
   for (const e of list) e===ball ? drawBall() : drawPlayer(e);
   if (c){                                                 // 조작 선수 표시와 강도 게이지
-    const h=proj(c.x,2.1,c.z);
+    const h=proj(c.x,2.1*CONFIG.size.player,c.z);
     if (h){
       ctx.fillStyle="#ffd84a"; ctx.strokeStyle=OUTLINE; ctx.lineWidth=1.5; ctx.lineJoin="round";
       ctx.beginPath(); ctx.moveTo(h.x-6,h.y-10); ctx.lineTo(h.x+6,h.y-10); ctx.lineTo(h.x,h.y); ctx.closePath(); ctx.stroke(); ctx.fill();
