@@ -505,8 +505,12 @@ function steer(p,wx,wz,dt){
   p.vx+=(wx-p.vx)*k; p.vz+=(wz-p.vz)*k;
   p.x=clamp(p.x+p.vx*dt,-HL-1.5,HL+1.5); p.z=clamp(p.z+p.vz*dt,-HW-1.5,HW+1.5);
   const sp=hyp(p.vx,p.vz);
-  if (sp>0.6){ let da=Math.atan2(p.vz,p.vx)-p.a; da=Math.atan2(Math.sin(da),Math.cos(da)); p.a+=da*Math.min(1,dt*10); }
-  p.ph+=sp*dt*1.9;
+  let turn=0;
+  if (sp>0.6){ let da=Math.atan2(p.vz,p.vx)-p.a; da=Math.atan2(Math.sin(da),Math.cos(da)); p.a+=da*Math.min(1,dt*10); turn=da; }
+  if (sp>0.3) p.ph+=(2.2+sp*1.45)*dt;                      // 걸음 빠르기: 느릴 땐 보폭이 짧고, 빠를수록 길어진다
+  const q=Math.min(1,dt*6);                               // 가속하면 앞으로 숙이고, 방향을 틀면 안쪽으로 기운다
+  p.accS=(p.accS||0)+(clamp((sp-(p.spPrev||0))/dt/10,-1,1)-(p.accS||0))*q; p.spPrev=sp;
+  p.roll=(p.roll||0)+(clamp(turn*1.2,-0.3,0.3)*Math.min(1,sp/5)-(p.roll||0))*q;
   p.run=(p.run||0)+(Math.min(1,sp/7.2)-(p.run||0))*Math.min(1,dt*9);   // 달리기 동작을 부드럽게 섞는 값
 }
 function stepPlayers(dt){
@@ -682,66 +686,138 @@ function drawWorld(){
     ctx.lineCap="butt";
   }
 }
-let LK=1;
+/* ----- 선수: 뼈대 자세 계산 → 그림자 → 몸 ----- */
 const OUTLINE="rgba(10,24,16,.5)";
-function limb(a,b,wm,color){                              // 테두리가 있는 둥근 팔다리
-  if (!a||!b) return;
-  const lw=Math.max(1.5,wm*LK*(a.s+b.s)/2);
-  ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
-  ctx.lineWidth=lw+1.6; ctx.strokeStyle=OUTLINE; ctx.stroke();
-  ctx.lineWidth=lw; ctx.strokeStyle=color; ctx.stroke();
-}
 const sm=t=>{ t=clamp(t,0,1); return t*t*(3-2*t); }, mix=(a,b,t)=>a+(b-a)*t;
 const HAIR=["#2a2018","#151515","#5a3b22","#c9a25a"];
-function drawPlayer(p){
-  const run=p.run||0, kit=KIT[p.team], shirt=p.gk?kit.gk:kit.shirt, shorts=p.gk?"#2b2f3d":kit.shorts;
-  const fx=Math.cos(p.a), fz=Math.sin(p.a), sx=-fz, sz=fx;
+const SUN={ x:-0.55, z:0.7 };                              // 키 1m당 그림자가 뻗는 방향·길이
+const shadeCache={};
+function shade(hex,f){                                    // 색을 어둡게(음영용)
+  const k=hex+f; if (shadeCache[k]) return shadeCache[k];
+  const n=parseInt(hex.slice(1),16), c=v=>Math.round(((n>>v)&255)*f);
+  return shadeCache[k]=`rgb(${c(16)},${c(8)},${c(0)})`;
+}
+// 달리기 한 사이클(0~1)의 엉덩이 각도·무릎 굽힘 키프레임. 0=앞발 착지, 0.35=뒤로 밀어차기, 0.55=뒤꿈치 올림, 0.75=무릎 들기
+const RUN_HIP=[[0,.45],[.15,.1],[.35,-.55],[.55,-.2],[.75,.95],[1,.45]];
+const RUN_KNEE=[[0,.25],[.15,.45],[.35,.25],[.55,1.9],[.75,1.5],[.9,.6],[1,.25]];
+const JOG_HIP=[[0,.3],[.2,0],[.45,-.35],[.6,-.15],[.8,.5],[1,.3]];
+const JOG_KNEE=[[0,.12],[.2,.3],[.45,.2],[.62,1.15],[.8,.9],[.92,.35],[1,.12]];
+function key(k,u){ u-=Math.floor(u); for (let i=1;i<k.length;i++) if (u<=k[i][0]){ const a=k[i-1], b=k[i]; return mix(a[1],b[1],sm((u-a[0])/(b[0]-a[0]))); } return k[0][1]; }
+
+function pose(p){
+  const K=CONFIG.size.player, run=p.run||0, fx=Math.cos(p.a), fz=Math.sin(p.a), sx=-fz, sz=fx;
   const slideK=p.slideT>0?sm((CONFIG.tackle.slideTime-p.slideT)/0.12):0;
   const diving=p.gk&&p.dive>0, holding=p.gk&&ball.owner===p, cheer=S.scorer===p.team&&S.dead&&!p.gk;
-  const kk=p.kickT>0?1-p.kickT/0.28:-1;
-  let lean=mix(0.05+0.17*run,-1.15,slideK); if (kk>=0) lean-=0.14*Math.sin(kk*Math.PI);
-  let ux=fx*Math.sin(lean), uy=Math.cos(lean), uz=fz*Math.sin(lean), baseY=0;
+  const kk=p.kickT>0?1-p.kickT/0.28:-1, carry=ball.owner===p&&!p.gk?1:0;
+  // 몸 전체 기울기(슬라이딩·다이빙)
+  let ux=0, uy=1, uz=0, baseY=0;
+  if (slideK){ const l=-1.15*slideK; ux=fx*Math.sin(l); uy=Math.cos(l); uz=fz*Math.sin(l); }
   if (diving){ const k=(0.55-p.dive)/0.55, d=p.diveDir*1.25*sm(k*3); ux=0; uy=Math.cos(d); uz=Math.sin(d); baseY=0.4*Math.sin(Math.min(1,k)*Math.PI); }
-  const bob=0.05*run*Math.abs(Math.sin(p.ph))+(1-run)*Math.sin(S.time*2.2+p.i)*0.008;
-  const hipH=0.9-0.04*run+bob, tw=Math.sin(p.ph)*0.3*run, L=0.44;
-  const K=LK=CONFIG.size.player;
-  const P=(al,h,sd)=>proj(p.x+(fx*al+ux*h+sx*sd)*K, (baseY+uy*h)*K, p.z+(fz*al+uz*h+sz*sd)*K);
-  const leg=s=>{
-    const ph=s>0?p.ph:p.ph+Math.PI, ha=s*0.115*Math.sin(tw), hs=s*0.115*Math.cos(tw);
-    let t=0.06*run+Math.sin(ph)*(0.05+0.95*run), b=0.1+0.25*run+1.7*run*Math.pow(Math.max(0,Math.cos(ph)),1.2);
+  const u=p.ph/(Math.PI*2), wJog=Math.min(1,run*2.4), wRun=sm((run-0.45)/0.45);
+  const legAng=s=>{
+    const v=u+(s>0?0:0.5);
+    let t=mix(key(JOG_HIP,v)*wJog,key(RUN_HIP,v),wRun), b=mix(mix(0.1,key(JOG_KNEE,v),wJog),key(RUN_KNEE,v),wRun);
+    if (!wJog) t=s*0.03;
     if (kk>=0 && s>0){ const w=sm(kk/0.35), f=sm((kk-0.35)/0.4); t=-0.95*w+2.25*f; b=1.35*w*(1-sm((kk-0.35)/0.3)); }
+    if (kk>=0 && s<0){ t=mix(t,0.1,0.8); b=mix(b,0.3,0.8); }
     if (slideK){ t=mix(t,s>0?1.35:0.8,slideK); b=mix(b,s>0?0.05:1.3,slideK); }
     if (diving){ t=s*0.3; b=0.4; }
-    const ka=ha+Math.sin(t)*L, kh=hipH-Math.cos(t)*L, fa=ka+Math.sin(t-b)*L, fh=Math.max(0.06,kh-Math.cos(t-b)*L);
-    const hip=P(ha,hipH,hs), knee=P(ka,kh,hs), foot=P(fa,fh,hs);
-    limb(hip,knee,0.15,p.skin); limb(hip,P(mix(ha,ka,0.5),mix(hipH,kh,0.5),hs),0.19,shorts);
-    limb(knee,foot,0.125,kit.sock); limb(foot,P(fa+0.15,Math.max(0.05,fh-0.03),hs),0.11,"#16181d");
+    return [t,b];
   };
-  const arm=s=>{
-    const ph=s>0?p.ph+Math.PI:p.ph, sa=-s*0.2*Math.sin(tw*1.2), ss=s*0.21*Math.cos(tw*1.2), shH=hipH+0.54;
-    let t=Math.sin(ph)*(0.08+0.95*run), e=0.25+1.25*run, out=0.03;
-    if (kk>=0){ t=mix(t,s<0?0.9:-0.7,Math.sin(kk*Math.PI)); out=0.12; }
-    if (cheer||diving){ t=2.8; e=0.15; } else if (holding){ t=1.0; e=1.2; } else if (slideK){ t=mix(t,-0.9,slideK); e=0.4; out=0.15; }
-    const ea=sa+Math.sin(t)*0.27, eh=shH-Math.cos(t)*0.27, ha=ea+Math.sin(t+e)*0.25, hh=eh-Math.cos(t+e)*0.25;
-    const sh=P(sa,shH,ss), el=P(ea,eh,ss+s*out), hd=P(ha,hh,ss+s*out*0.6);
-    limb(el,hd,0.085,p.gk?"#f1f1f1":p.skin); limb(sh,el,0.11,shirt);
+  const L1=0.45, L2=0.45, crouch=0.05*run+0.03*carry+(kk>=0?0.03:0);
+  const legs={}; let minA=9;
+  for (const s of [1,-1]){
+    const [t,b]=legAng(s), ka=Math.sin(t)*L1, kh=-Math.cos(t)*L1, aa=ka+Math.sin(t-b)*L2, ah=kh-Math.cos(t-b)*L2;
+    legs[s]={ ka, kh, aa, ah, t }; minA=Math.min(minA,ah);
+  }
+  // 골반 높이: 딛는 발이 땅에 닿게 맞추고, 전력 질주 때만 살짝 뜬다
+  let hipH=0.93-crouch;
+  if (!slideK && !diving){ const low=hipH+minA-0.07; hipH-=low; hipH=Math.min(hipH,0.93-crouch+0.02)+Math.min(0.05*wRun,Math.max(0,low)); }
+  hipH+=(1-wJog)*Math.sin(S.time*2.2+p.i)*0.006;
+  const W=(al,h,sd)=>[p.x+(fx*al+ux*h+sx*sd)*K, (baseY+uy*h)*K, p.z+(fz*al+uz*h+sz*sd)*K];
+  // 상체: 골반 기준으로 앞으로 숙이고(가속할수록 더), 도는 쪽으로 기울고, 어깨는 골반과 반대로 비튼다
+  let lean=0.06+0.1*wJog+0.12*wRun+0.12*(p.accS||0)+0.05*carry, roll=(p.roll||0);
+  if (kk>=0) lean-=0.2*Math.sin(kk*Math.PI);
+  if (slideK||diving){ lean*=0.3; roll=0; }
+  const tw=Math.sin(p.ph)*(0.1*wJog+0.16*wRun), cl=Math.cos(lean), sl=Math.sin(lean), cr=Math.cos(roll), sr=Math.sin(roll);
+  const T=(al,h,sd,yaw)=>{                                 // 상체 좌표 → 세계 좌표
+    const cy=Math.cos(yaw), sy=Math.sin(yaw), a1=al*cy-sd*sy, d1=al*sy+sd*cy;
+    const a2=a1*cl+h*sl, h2=-a1*sl+h*cl;
+    return W(a2, hipH+h2*cr-d1*sr, d1*cr+h2*sr);
   };
-  const far=(sx*sinY-sz*cosY)>0?1:-1;
-  ctx.lineCap="round"; ctx.lineJoin="round";
-  arm(far); leg(far); leg(-far);
-  // 몸통: 어깨·골반이 달릴 때 반대로 비틀린다
-  const shH=hipH+0.54, pt=(w,a,h,s)=>P(-s*w*Math.sin(a)*(h>hipH+0.3?1:-1), h, s*w*Math.cos(a));
-  const sL=pt(0.2,tw*1.2,shH,-1), sR=pt(0.2,tw*1.2,shH,1), hL=pt(0.13,tw,hipH+0.1,-1), hR=pt(0.13,tw,hipH+0.1,1);
-  limb(P(0,hipH+0.02,0),P(0,hipH+0.1,0),0.3,shorts);
-  limb(P(0,hipH+0.16,0),P(0,shH-0.06,0),0.3,shirt); limb(sL,sR,0.13,shirt);
-  if (sL&&sR&&hL&&hR){ ctx.fillStyle=shirt; ctx.beginPath(); ctx.moveTo(sL.x,sL.y); ctx.lineTo(sR.x,sR.y); ctx.lineTo(hR.x,hR.y); ctx.lineTo(hL.x,hL.y); ctx.fill(); }
-  const head=P(0.02,hipH+0.77,0), face=P(0.075,hipH+0.76,0);
-  if (head&&face){ const r=Math.max(2.3,0.12*K*head.s);
-    limb(P(0,shH,0),head,0.09,p.skin);
-    ctx.fillStyle=OUTLINE; ctx.beginPath(); ctx.arc(head.x,head.y,r+0.8,0,7); ctx.fill();
-    ctx.fillStyle=HAIR[(p.i*3+p.team)%HAIR.length]; ctx.beginPath(); ctx.arc(head.x,head.y,r,0,7); ctx.fill();
-    ctx.fillStyle=p.skin; ctx.beginPath(); ctx.arc(face.x,face.y+r*0.12,r*0.8,0,7); ctx.fill(); }
-  arm(-far);
+  const J={ far:(sx*sinY-sz*cosY)>0?1:-1 };
+  for (const s of [1,-1]){
+    const g=legs[s], hs=s*0.1+(wJog?0:s*0.03), ha=s*0.1*Math.sin(-tw*0.6);
+    const toeA=clamp((hipH+g.ah-0.1)*2.6,0,1.1)+(slideK?0:0);
+    J["hip"+s]=W(ha,hipH,hs); J["knee"+s]=W(ha+g.ka,hipH+g.kh,hs); J["ank"+s]=W(ha+g.aa,hipH+g.ah,hs);
+    J["toe"+s]=W(ha+g.aa+Math.cos(toeA)*0.2,Math.max(0.035,hipH+g.ah-0.035-Math.sin(toeA)*0.17),hs);
+    // 팔: 같은 쪽 다리와 반대로 흔든다. 달릴수록 팔꿈치를 굽힌다
+    let at=-g.t*1.05, e=mix(0.22,1.5,Math.min(1,run*1.7))+0.3*Math.max(0,at), out=0.05+0.05*carry;
+    if (!wJog) at=0.05;
+    if (kk>=0){ at=mix(at,s<0?1.0:-0.8,Math.sin(kk*Math.PI)); out=0.16; }
+    if (cheer||diving){ at=2.8; e=0.15; out=0.1; } else if (holding){ at=1.0; e=1.2; } else if (slideK){ at=mix(at,-0.9,slideK); e=0.4; out=0.18; }
+    const sy=tw*1.3, sw=s*0.2, ea=Math.sin(at)*0.29, eh=0.5-Math.cos(at)*0.29;
+    J["sh"+s]=T(0,0.5,sw,sy); J["el"+s]=T(ea,eh,sw+s*out,sy);
+    J["hand"+s]=T(ea+Math.sin(at+e)*0.27,eh-Math.cos(at+e)*0.27,sw+s*out*0.5,sy);
+  }
+  J.pelvis=W(0,hipH+0.04,0); J.waist=T(0,0.16,0,0); J.chest=T(0.01,0.44,0,0); J.neck=T(0.015,0.56,0,0);
+  J.head=T(0.03,0.7,0,0); J.face=T(0.085,0.685,0,0); J.hairP=T(-0.015,0.725,0,0);
+  return J;
+}
+const BONES=[["hip1","knee1"],["knee1","ank1"],["ank1","toe1"],["hip-1","knee-1"],["knee-1","ank-1"],["ank-1","toe-1"],
+             ["pelvis","chest"],["sh1","sh-1"],["sh1","el1"],["el1","hand1"],["sh-1","el-1"],["el-1","hand-1"],["chest","head"]];
+function drawShadow(p){                                   // 자세 그대로 땅에 드리우는 그림자
+  const J=p._j, sp=n=>{ const j=J[n]; return proj(j[0]+j[1]*SUN.x,0.01,j[2]+j[1]*SUN.z); };
+  const c=sp("pelvis"); if (!c) return;
+  ctx.beginPath();
+  for (const [a,b] of BONES){ const A=sp(a), B=sp(b); if (!A||!B) return; ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); }
+  ctx.lineCap="round"; ctx.lineJoin="round"; ctx.lineWidth=Math.max(2,0.21*CONFIG.size.player*c.s); ctx.strokeStyle="rgba(0,22,8,.3)"; ctx.stroke();
+  const h=sp("head"); ctx.fillStyle="rgba(0,22,8,.3)"; ctx.beginPath(); ctx.ellipse(h.x,h.y,0.13*CONFIG.size.player*h.s,0.08*CONFIG.size.player*h.s,0,0,7); ctx.fill();
+}
+let LK=1;
+function taper(a,b,wa,wb,col){                            // 양 끝 굵기가 다른 둥근 팔다리(근육 느낌)
+  const ra=Math.max(0.9,wa*LK*a.s/2), rb=Math.max(0.8,wb*LK*b.s/2), dx=b.x-a.x, dy=b.y-a.y, len=Math.hypot(dx,dy)||1, nx=-dy/len, ny=dx/len;
+  ctx.fillStyle=col; ctx.beginPath();
+  ctx.moveTo(a.x+nx*ra,a.y+ny*ra); ctx.lineTo(b.x+nx*rb,b.y+ny*rb); ctx.lineTo(b.x-nx*rb,b.y-ny*rb); ctx.lineTo(a.x-nx*ra,a.y-ny*ra); ctx.closePath();
+  ctx.moveTo(a.x+ra,a.y); ctx.arc(a.x,a.y,ra,0,7); ctx.moveTo(b.x+rb,b.y); ctx.arc(b.x,b.y,rb,0,7); ctx.fill();
+}
+function part(a,b,wa,wb,col,dim){                         // 어두운 바탕 + 빛 받는 쪽 밝은 면
+  if (!a||!b) return;
+  taper(a,b,wa,wb,shade(col,dim*0.7));
+  const o=0.11*LK*wa*a.s, a2={x:a.x-o*0.6,y:a.y-o*0.75,s:a.s}, b2={x:b.x-o*0.6,y:b.y-o*0.75,s:b.s};
+  taper(a2,b2,wa*0.8,wb*0.8,dim===1?col:shade(col,dim));
+}
+function drawPlayer(p){
+  const J=p._j, K=LK=CONFIG.size.player, kit=KIT[p.team], shirt=p.gk?kit.gk:kit.shirt, shorts=p.gk?"#2b2f3d":kit.shorts;
+  const boot=(p.i+p.team)%3?"#17191f":"#f2f2f2", Q={};
+  for (const n in J) if (n!=="far") Q[n]=proj(J[n][0],J[n][1],J[n][2]);
+  if (!Q.pelvis||!Q.head) return;
+  const mid=(a,b,t)=>a&&b&&{x:mix(a.x,b.x,t),y:mix(a.y,b.y,t),s:mix(a.s,b.s,t)};
+  const leg=(s,d)=>{
+    part(Q["hip"+s],Q["knee"+s],0.21,0.14,p.skin,d);
+    part(Q["knee"+s],Q["ank"+s],0.15,0.095,kit.sock,d);
+    part(Q["ank"+s],Q["toe"+s],0.1,0.075,boot,d);
+    part(Q["hip"+s],mid(Q["hip"+s],Q["knee"+s],0.58),0.225,0.2,shorts,d);
+  };
+  const arm=(s,d)=>{
+    part(Q["sh"+s],Q["el"+s],0.115,0.09,p.skin,d);
+    part(Q["el"+s],Q["hand"+s],0.088,0.068,p.gk?"#f1f1f1":p.skin,d);
+    part(Q["sh"+s],mid(Q["sh"+s],Q["el"+s],0.55),0.135,0.12,shirt,d);
+  };
+  const f=J.far;
+  arm(f,0.8); leg(f,0.82); leg(-f,1);
+  part(Q.hip1,Q["hip-1"],0.21,0.21,shorts,1);
+  part(Q.pelvis,Q.waist,0.32,0.3,shorts,1);
+  part(Q.waist,Q.chest,0.3,0.37,shirt,1);
+  part(Q.sh1,Q["sh-1"],0.17,0.17,shirt,1);
+  if (Q.sh1&&Q["sh-1"]&&Q.hip1&&Q["hip-1"]){ ctx.fillStyle=shirt; ctx.beginPath(); ctx.moveTo(Q.sh1.x,Q.sh1.y); ctx.lineTo(Q["sh-1"].x,Q["sh-1"].y);
+    const w1=mid(Q["hip-1"],Q.waist,0.6), w2=mid(Q.hip1,Q.waist,0.6); ctx.lineTo(w1.x,w1.y); ctx.lineTo(w2.x,w2.y); ctx.fill(); }
+  part(Q.chest,Q.neck,0.1,0.09,p.skin,0.9);
+  const r=Math.max(2.2,0.112*K*Q.head.s);
+  ctx.fillStyle=shade(p.skin,0.62); ctx.beginPath(); ctx.ellipse(Q.head.x,Q.head.y,r,r*1.1,0,0,7); ctx.fill();
+  if (Q.hairP){ ctx.fillStyle=HAIR[(p.i*3+p.team)%HAIR.length]; ctx.beginPath(); ctx.ellipse(Q.hairP.x,Q.hairP.y,r*1.02,r*0.98,0,0,7); ctx.fill(); }
+  if (Q.face){ ctx.fillStyle=p.skin; ctx.beginPath(); ctx.ellipse(Q.face.x,Q.face.y+r*0.1,r*0.74,r*0.86,0,0,7); ctx.fill(); }
+  arm(-f,1);
 }
 function drawBall(){
   const b=proj(ball.x,ball.y,ball.z); if (!b) return;
@@ -756,11 +832,11 @@ function drawEntities(){
   const list=[...players, ball];
   for (const e of list) e._d=toCam(e.x,0,e.z)[2];
   list.sort((a,b)=>b._d-a._d);
-  for (const e of list){                                  // 부드러운 그림자 먼저
-    const isB=e===ball, g=proj(e.x+(isB?ball.y*0.25:0.12),0,e.z+(isB?ball.y*0.1:0.05)); if (!g) continue;
-    const k=isB?Math.max(0.45,1-ball.y*0.07):1, rx=(isB?0.17*CONFIG.size.ball:0.42*CONFIG.size.player)*g.s*k, ry=rx*0.46;
-    ctx.fillStyle="rgba(0,20,8,.16)"; ctx.beginPath(); ctx.ellipse(g.x,g.y,rx*1.35,ry*1.35,0,0,7); ctx.fill();
-    ctx.fillStyle="rgba(0,20,8,.24)"; ctx.beginPath(); ctx.ellipse(g.x,g.y,rx,ry,0,0,7); ctx.fill();
+  for (const e of list){                                  // 그림자 먼저
+    if (e!==ball){ e._j=pose(e); drawShadow(e); continue; }
+    const g=proj(ball.x+ball.y*SUN.x,0.01,ball.z+ball.y*SUN.z); if (!g) continue;
+    const rx=0.17*CONFIG.size.ball*g.s*Math.max(0.5,1-ball.y*0.05);
+    ctx.fillStyle="rgba(0,22,8,.3)"; ctx.beginPath(); ctx.ellipse(g.x-rx*0.3,g.y+rx*0.2,rx,rx*0.5,0,0,7); ctx.fill();
   }
   const c=S.ctrl, g=c&&proj(c.x,0,c.z);
   if (g){ ctx.strokeStyle="rgba(255,216,74,.95)"; ctx.lineWidth=Math.max(2,0.07*g.s); ctx.beginPath(); ctx.ellipse(g.x,g.y,0.62*CONFIG.size.player*g.s,0.28*CONFIG.size.player*g.s,0,0,7); ctx.stroke(); }
