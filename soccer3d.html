@@ -120,7 +120,7 @@ const THREE=window.THREE;
 const CONFIG = {
   matchSeconds: 240,                       // 실제 플레이 시간(전·후반 합계) → 화면 시계 90분
   size:   { player: 1.28, ball: 1.25, goalHalfWidth: 4.7, goalHeight: 3.1 },   // 화면에 보이는 선수·공 크기 배율, 골대 반폭·높이(m)
-  pose:   { useVideoRun: true, blend: 1.6 },   // useVideoRun: 영상에서 뽑은 달리기 동작 사용(false면 기존 계산 동작), blend: 클수록 느린 속도에서도 달리기 자세가 강하게
+  pose:   { useVideoRun: true, blend: 1.6, rate: 2 },   // useVideoRun: 영상에서 뽑은 달리기 동작 사용(false면 기존 계산 동작), blend: 클수록 느린 속도에서도 달리기 자세가 강하게, rate: 달리기 동작 재생 빠르기(1 = 원래, 2 = 2배)
   gfx:    { shadows: true, shadowMap: 2048, maxPixelRatio: 2 },   // 느린 기기에서는 shadows:false, maxPixelRatio:1 로
   autoSwitch: { every: 0.12, margin: 1.5 },   // 패스 중 자동 선수 전환: 검사 주기(초), 이만큼(m) 더 가까워야 전환
   player: { speed: 7.0, dribble: 0.9, accel: 7, cpuSpeed: 0.93, control: 0.9 },
@@ -530,7 +530,7 @@ function steer(p,wx,wz,dt){
   p.x=clamp(p.x+p.vx*dt,-HL-1.5,HL+1.5); p.z=clamp(p.z+p.vz*dt,-HW-1.5,HW+1.5);
   const sp=hyp(p.vx,p.vz);
   if (sp>0.6){ let da=Math.atan2(p.vz,p.vx)-p.a; da=Math.atan2(Math.sin(da),Math.cos(da)); p.a+=da*Math.min(1,dt*10); }
-  p.ph+=sp*dt*1.9;
+  p.ph+=sp*dt*1.9*CONFIG.pose.rate;                        // 걸음 박자: rate 가 클수록 다리가 빨리 움직인다
   p.run=(p.run||0)+(Math.min(1,sp/7.2)-(p.run||0))*Math.min(1,dt*9);   // 달리기 동작을 부드럽게 섞는 값
 }
 function stepPlayers(dt){
