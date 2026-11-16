@@ -14,7 +14,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d3b1e;color:var(--te
 canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
 .hud{position:fixed;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;
   background:var(--hud);color:var(--hudtext);border-radius:12px;padding:6px 14px;font-weight:700;font-size:15px;white-space:nowrap}
-.hud .t0{color:#8fb0ff}.hud .t1{color:#ff9a9c}.hud .clock{font-weight:500;opacity:.85;min-width:34px;text-align:right}
+.hud .t0{color:#ff9a9c}.hud .t1{color:#8fb0ff}.hud .clock{font-weight:500;opacity:.85;min-width:34px;text-align:right}
 .corner{position:fixed;top:max(8px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right));display:flex;gap:6px}
 .icon{font:inherit;width:40px;height:40px;border-radius:10px;border:0;background:var(--hud);color:#fff;cursor:pointer;font-size:17px}
 .icon[aria-pressed="true"]{background:#2f6bff}
@@ -50,7 +50,7 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
 <canvas id="cv" aria-hidden="true"></canvas>
 
 <div class="hud" id="hud" hidden>
-  <span class="t0">블루</span><span id="score">0 - 0</span><span class="t1">레드</span><span class="clock" id="clock">0'</span>
+  <span class="t0">레드</span><span id="score">0 - 0</span><span class="t1">블루</span><span class="clock" id="clock">0'</span>
 </div>
 <div class="corner" id="corner" hidden>
   <button class="icon" id="bPose" aria-pressed="false" aria-label="포즈 관절 보기">🦴</button>
@@ -68,7 +68,7 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
 <div class="overlay" id="ovTitle">
   <section class="panel">
     <h1>⚽ 킥오프 사커 3D</h1>
-    <p>블루 팀을 조작해 레드 팀을 이기세요. 버튼을 길게 누를수록 강하게 찹니다.</p>
+    <p>레드 팀을 조작해 블루 팀을 이기세요. 버튼을 길게 누를수록 강하게 찹니다.</p>
     <dl>
       <dt>이동</dt><dd>화면 왼쪽 드래그 · WASD / 방향키</dd>
       <dt>패스</dt><dd>패스 버튼 · J (공 없을 때 짧게: 선수 전환)</dd>
@@ -153,8 +153,8 @@ const FORM = [[-50,0,"GK"],
              ].map(([x,z,r])=>[x*SX,z*SZ,r]);                                  // 경기장 크기에 맞춰 늘림
 const KIT = [{shirt:"#2f6bff",shorts:"#ffffff",sock:"#2f6bff",gk:"#f2c230"},
              {shirt:"#e5383b",shorts:"#1b1b1b",sock:"#e5383b",gk:"#35c46a"}];
-const SKIN = ["#f1c9a5","#c98e62","#8a5a3c"];
-const TEAM = ["블루","레드"];
+const SKIN = ["#dba77f","#c98e62","#8a5a3c"];
+const TEAM = ["레드","블루"];
 
 const $ = id => document.getElementById(id);
 const clamp = (v,a,b) => v<a?a:v>b?b:v, rnd = (a,b) => a+Math.random()*(b-a), hyp = Math.hypot;
@@ -894,108 +894,149 @@ function poseProcedural(p,lm){
   }
   set(LM.NOSE,0.14,hipH+0.77,0);
 }
-/* ----- 3D 선수 -----
-   뼈대 애니메이션 모델 대신, 포즈 관절(p.lm 33개) 사이사이에 팔다리 조각을 매 프레임 끼워 맞춥니다.
-   조각은 InstancedMesh 3개(원통·구·머리카락)로 한꺼번에 그려서 22명이어도 가볍습니다. */
-const KIT3=[{ shirt:"#2f6bff", sleeve:"#1c3f9e", trim:"#ffffff", shorts:"#ffffff", sock:"#2f6bff", gk:"#f2c230", gkSleeve:"#2b2f3d" },
-            { shirt:"#e5383b", sleeve:"#3a1012", trim:"#ffd9d9", shorts:"#1b1b1b", sock:"#e5383b", gk:"#35c46a", gkSleeve:"#1f3d2a" }];
-const BOOTS=["#e8362f","#17191f","#f2f2f2","#22c3d6"], HAIR=["#2a2018","#151515","#5a3b22","#c9a25a"];
-const CYL_N=18, SPH_N=6, NP=22;
-const unitCyl=new THREE.CylinderGeometry(0.78,1,1,12,1); unitCyl.translate(0,0.5,0);          // 아래(반지름 1) → 위(0.78)로 가늘어지는 길이 1 원통
-const bodyMat=new THREE.MeshStandardMaterial({ roughness:0.75, metalness:0 });
-const cylMesh=new THREE.InstancedMesh(unitCyl,bodyMat,NP*CYL_N), sphMesh=new THREE.InstancedMesh(new THREE.SphereGeometry(1,12,10),bodyMat,NP*SPH_N);
-const hairMesh=new THREE.InstancedMesh(new THREE.SphereGeometry(1,14,8,0,Math.PI*2,0,Math.PI*0.47),new THREE.MeshStandardMaterial({ roughness:0.95 }),NP);
-for (const m of [cylMesh,sphMesh,hairMesh]){ m.castShadow=true; m.frustumCulled=false; scene.add(m); }
-// 몸통: 어깨가 넓고 허리가 좁은 타원 기둥. 이음매는 옆구리에 두고 앞(u=0.75)·뒤(u=0.25)에 등번호를 그린다
-const torsoGeo=new THREE.CylinderGeometry(1,0.8,1,20,1,false,Math.PI/2); torsoGeo.translate(0,0.5,0);
-const headGeo=new THREE.SphereGeometry(1,20,14);
-const faceTex={};
-function faceTexture(skin){
-  return faceTex[skin]||(faceTex[skin]=canvasTex(256,128,(g,w,h)=>{
-    g.fillStyle=skin; g.fillRect(0,0,w,h); const cx=w*0.25;                     // 얼굴 정면은 u=0.25
-    g.fillStyle="rgba(0,0,0,.10)"; g.fillRect(cx-22,h*0.60,44,h*0.2);          // 수염 자리 음영
-    g.fillStyle="#fff"; g.fillRect(cx-15,h*0.43,9,5); g.fillRect(cx+6,h*0.43,9,5);
-    g.fillStyle="#1d1410"; g.fillRect(cx-12,h*0.43,4,5); g.fillRect(cx+9,h*0.43,4,5);
-    g.fillRect(cx-17,h*0.37,13,3); g.fillRect(cx+4,h*0.37,13,3);              // 눈썹
-    g.fillStyle="rgba(60,20,10,.35)"; g.fillRect(cx-2,h*0.46,4,13); g.fillStyle="rgba(120,40,40,.6)"; g.fillRect(cx-8,h*0.66,16,3);
-  }));
-}
-function shirtTexture(kit,number,gk){                      // 우리만의 유니폼: 옆 패널 + 가는 세로줄 + 등번호
-  const base=gk?kit.gk:kit.shirt, panel=gk?kit.gkSleeve:kit.sleeve;
-  return canvasTex(256,128,(g,w,h)=>{
-    g.fillStyle=base; g.fillRect(0,0,w,h);
-    g.fillStyle="rgba(0,0,0,.14)"; for (let x=8;x<w;x+=16) g.fillRect(x,0,1.5,h);
-    g.fillStyle=panel; g.fillRect(0,0,14,h); g.fillRect(w-14,0,14,h); g.fillRect(w/2-14,0,28,h);   // 양 옆구리
-    g.fillStyle=kit.trim; g.fillRect(0,0,w,5);                                 // 목둘레
-    g.textAlign="center"; g.textBaseline="middle"; g.fillStyle=gk?"#101418":"#ffffff";
-    g.font="bold 58px system-ui,sans-serif"; g.fillText(number,w*0.25,h*0.52);  // 등
-    g.font="bold 24px system-ui,sans-serif"; g.fillText(number,w*0.75,h*0.42);  // 가슴
-  });
-}
-const rig=[];                                              // 선수별 3D 부품
-function buildPlayers3D(){
-  for (const r of rig){ scene.remove(r.torso,r.head); r.torso.material.map.dispose(); r.torso.material.dispose(); }
-  rig.length=0;
-  const col=new THREE.Color(), setC=(mesh,i,hex)=>mesh.setColorAt(i,col.set(hex));
-  players.forEach((p,n)=>{
-    const kit=KIT3[p.team], shirt=p.gk?kit.gk:kit.shirt, sleeve=p.gk?kit.gkSleeve:kit.sleeve, shorts=p.gk?"#2b2f3d":kit.shorts, boot=BOOTS[(p.i*5+p.team)%BOOTS.length];
-    const torso=new THREE.Mesh(torsoGeo,new THREE.MeshStandardMaterial({ map:shirtTexture(kit,p.gk?1:p.i+1,p.gk), roughness:0.85 }));
-    const head=new THREE.Mesh(headGeo,new THREE.MeshStandardMaterial({ map:faceTexture(p.skin), roughness:0.7 }));
-    torso.castShadow=head.castShadow=true; torso.matrixAutoUpdate=head.matrixAutoUpdate=false; torso.frustumCulled=head.frustumCulled=false;
-    scene.add(torso,head); rig.push({ torso, head });
-    // 원통 조각 색 (순서는 poseToMesh 와 같아야 함): 좌·우 각각 [반바지허벅지, 허벅지, 정강이(양말), 축구화, 소매, 위팔, 아래팔] + 골반 + 목 + 예비 2
-    const c=n*CYL_N;
-    for (let s=0;s<2;s++){ const b=c+s*7; setC(cylMesh,b,shorts); setC(cylMesh,b+1,p.skin); setC(cylMesh,b+2,kit.sock); setC(cylMesh,b+3,boot);
-      setC(cylMesh,b+4,sleeve); setC(cylMesh,b+5,p.skin); setC(cylMesh,b+6,p.gk?"#f1f1f1":p.skin); }
-    setC(cylMesh,c+14,shorts); setC(cylMesh,c+15,p.skin); setC(cylMesh,c+16,shorts); setC(cylMesh,c+17,shorts);
-    // 구 조각: 좌·우 [어깨, 무릎, 손]
-    const q=n*SPH_N; for (let s=0;s<2;s++){ setC(sphMesh,q+s*3,sleeve); setC(sphMesh,q+s*3+1,p.skin); setC(sphMesh,q+s*3+2,p.gk?"#f1f1f1":p.skin); }
-    setC(hairMesh,n,HAIR[(p.i*3+p.team)%HAIR.length]);
-  });
-  cylMesh.instanceColor.needsUpdate=sphMesh.instanceColor.needsUpdate=hairMesh.instanceColor.needsUpdate=true;
-}
-const A=new THREE.Vector3(), B=new THREE.Vector3(), X=new THREE.Vector3(), Y=new THREE.Vector3(), Z=new THREE.Vector3(), M=new THREE.Matrix4(), UP=new THREE.Vector3(0,1,0);
-const jw=Array.from({length:33},()=>new THREE.Vector3());  // 관절의 세계 좌표
-// a→b 를 잇는 가늘어지는 원통. side 가 있으면 그 방향 반지름 rx, 수직 방향 rz 인 타원 단면
-function putCyl(i,a,b,rx,rz,side){
-  Y.subVectors(b,a); const len=Y.length()||1e-4; Y.divideScalar(len);
-  if (side) X.copy(side).addScaledVector(Y,-side.dot(Y)); else X.set(Y.z,0,-Y.x);
-  if (X.lengthSq()<1e-6) X.set(1,0,0); X.normalize(); Z.crossVectors(X,Y);
-  M.makeBasis(X.multiplyScalar(rx),Y.multiplyScalar(len),Z.multiplyScalar(rz)).setPosition(a); cylMesh.setMatrixAt(i,M);
-}
-function putSph(i,c,r){ M.makeScale(r,r,r).setPosition(c); sphMesh.setMatrixAt(i,M); }
-const mixV=(a,b,t)=>new THREE.Vector3().lerpVectors(a,b,t);
-function poseToMesh(p,n){
-  const K=CONFIG.size.player, fx=Math.cos(p.a), fz=Math.sin(p.a), sx=-fz, sz=fx, r=rig[n];
-  for (let i=0;i<33;i++){ const l=p.lm[i]; jw[i].set(p.x+(fx*l[0]+sx*l[2])*K, l[1]*K, p.z+(fz*l[0]+sz*l[2])*K); }
-  const sL=jw[LM.L_SHOULDER], sR=jw[LM.R_SHOULDER], hL=jw[LM.L_HIP], hR=jw[LM.R_HIP];
-  const hipC=mixV(hL,hR,0.5), shC=mixV(sL,sR,0.5), spine=new THREE.Vector3().subVectors(shC,hipC).normalize();
-  const left=new THREE.Vector3().subVectors(sL,sR).normalize(), fwd=new THREE.Vector3().crossVectors(left,spine).normalize();
-  const c=n*CYL_N, q=n*SPH_N;
-  for (let s=0;s<2;s++){                                    // s=0 왼쪽, 1 오른쪽 (MediaPipe 번호: 오른쪽 = 왼쪽+1)
-    const b=c+s*7, hip=jw[LM.L_HIP+s], knee=jw[LM.L_KNEE+s], ank=jw[LM.L_ANKLE+s], sh=jw[LM.L_SHOULDER+s], el=jw[LM.L_ELBOW+s], wr=jw[LM.L_WRIST+s];
-    const hipTop=mixV(hip,shC,0.06);
-    putCyl(b,hipTop,mixV(hip,knee,0.6),0.118*K,0.118*K); putCyl(b+1,mixV(hip,knee,0.45),knee,0.094*K,0.094*K);
-    putCyl(b+2,knee,ank,0.076*K,0.076*K);
-    putCyl(b+3,jw[LM.L_HEEL+s],jw[LM.L_FOOT+s],0.058*K,0.055*K,left);
-    putCyl(b+4,sh,mixV(sh,el,0.62),0.07*K,0.07*K); putCyl(b+5,mixV(sh,el,0.5),el,0.058*K,0.058*K); putCyl(b+6,el,wr,0.053*K,0.053*K);
-    putSph(q+s*3,sh,0.074*K); putSph(q+s*3+1,knee,0.073*K); putSph(q+s*3+2,mixV(wr,jw[LM.L_INDEX+s],0.6),0.045*K);
+/* ----- 3D 선수: 하나로 이어진 몸(스킨 메시) -----
+   몸은 코드로 만든 한 덩어리 메시이고, 뼈 13개가 피부를 움직입니다. 뼈의 위치·방향은 매 프레임 포즈 관절(p.lm 33개)에서 계산하므로
+   달리기·킥·드리블 터치 같은 기존 동작이 그대로 적용됩니다. 체형과 유니폼 구성은 참고 사진을 본떴고, 로고와 실제 얼굴은 넣지 않았습니다. */
+const V3=THREE.Vector3;
+const PT={ SKIN:0, SHIRT:1, SHORTS:2, SOCK:3, BOOT:4, HAIR:5, TRIM:6, HEM:7, ACCENT:8, WHITE:9, HAND:10, DARK:11, TEX:12 };
+const BN={ PELVIS:0, CHEST:1, HEAD:2, THIGH:3, SHIN:5, FOOT:7, UARM:9, FARM:11, COUNT:13 };     // 좌우가 있는 뼈는 +0 왼쪽, +1 오른쪽
+// 기준 자세(차렷): 포즈 관절과 같은 좌표 [앞, 위, 오른쪽] m
+const REST=(()=>{ const J=Array.from({length:33},()=>new V3()), set=(i,al,h,sd)=>J[i].set(al,h,sd);
+  set(LM.NOSE,0.14,1.70,0);
+  for (const s of [-1,1]){ const R=s>0?1:0;
+    set(LM.L_EAR+R,0.02,1.70,s*0.09); set(LM.L_SHOULDER+R,0,1.46,s*0.21); set(LM.L_ELBOW+R,0,1.19,s*0.24); set(LM.L_WRIST+R,0,0.94,s*0.25);
+    set(LM.L_HIP+R,0,0.94,s*0.115); set(LM.L_KNEE+R,0,0.50,s*0.115); set(LM.L_ANKLE+R,0,0.06,s*0.115); set(LM.L_HEEL+R,-0.06,0.02,s*0.115); set(LM.L_FOOT+R,0.15,0.03,s*0.115); }
+  return J; })();
+// 관절 위치 → 뼈 13개의 변환 행렬. 각 뼈는 관절에서 시작해 다음 관절을 향한다(Y축). X축은 몸의 왼쪽을 기준으로 잡아 비틀림을 막는다
+const _X=new V3(), _Z=new V3(), _a=new V3(), _b=new V3(), _c=new V3();
+function computeFrames(j,K,out){
+  const hL=j[23], hR=j[24], sL=j[11], sR=j[12];
+  const hipC=new V3().addVectors(hL,hR).multiplyScalar(0.5), shC=new V3().addVectors(sL,sR).multiplyScalar(0.5), spine=new V3().subVectors(shC,hipC).normalize();
+  const left=new V3().subVectors(hL,hR).normalize(), leftS=new V3().subVectors(sL,sR).normalize(), fwd=new V3().crossVectors(leftS,spine).normalize();
+  const dir=(a,b)=>new V3().subVectors(b,a).normalize();
+  const put=(i,o,y,ref,alt)=>{
+    _X.copy(ref).addScaledVector(y,-ref.dot(y));
+    if (_X.lengthSq()<0.02){ const r=alt||fwd; _X.copy(r).addScaledVector(y,-r.dot(y)); }
+    _X.normalize(); _Z.crossVectors(_X,y);
+    out[i].makeBasis(_a.copy(_X).multiplyScalar(K),_b.copy(y).multiplyScalar(K),_c.copy(_Z).multiplyScalar(K)).setPosition(o);
+    return _X.clone();
+  };
+  put(BN.PELVIS,hipC,spine,left); put(BN.CHEST,new V3().lerpVectors(hipC,shC,0.5),spine,leftS);
+  const headC=new V3().addVectors(j[7],j[8]).multiplyScalar(0.5);
+  put(BN.HEAD,shC,dir(shC,headC),new V3().subVectors(j[7],j[8]).normalize(),left);
+  for (let s=0;s<2;s++){
+    const xt=put(BN.THIGH+s,j[23+s],dir(j[23+s],j[25+s]),left); put(BN.SHIN+s,j[25+s],dir(j[25+s],j[27+s]),xt,left);
+    put(BN.FOOT+s,j[27+s],dir(j[29+s],j[31+s]),left);
+    const xa=put(BN.UARM+s,j[11+s],dir(j[11+s],j[13+s]),leftS); put(BN.FARM+s,j[13+s],dir(j[13+s],j[15+s]),xa,leftS);
   }
-  const waist=mixV(hipC,shC,0.2), neckB=mixV(hipC,shC,1.02), headC=mixV(jw[LM.L_EAR],jw[LM.R_EAR],0.5);
-  putCyl(c+14,mixV(hipC,shC,-0.14),mixV(hipC,shC,0.3),0.19*K,0.13*K,left);                // 골반(반바지)
-  putCyl(c+15,neckB,headC,0.05*K,0.05*K);                                                 // 목
-  M.makeScale(0,0,0); cylMesh.setMatrixAt(c+16,M); cylMesh.setMatrixAt(c+17,M);
-  // 몸통: x=왼쪽, y=척추, z=앞
-  X.copy(left).addScaledVector(spine,-left.dot(spine)).normalize(); Z.crossVectors(X,spine);
-  const tl=shC.distanceTo(waist)*1.06;
-  r.torso.matrix.makeBasis(X.clone().multiplyScalar(0.225*K),spine.clone().multiplyScalar(tl),Z.clone().multiplyScalar(0.14*K)).setPosition(waist);
-  // 머리: 코가 향하는 쪽이 얼굴
-  const hy=new THREE.Vector3().addVectors(spine,UP).normalize(), hz=new THREE.Vector3().subVectors(jw[LM.NOSE],headC); hz.addScaledVector(hy,-hz.dot(hy)).normalize();
-  const hx=new THREE.Vector3().crossVectors(hy,hz), R=0.108*K;
-  r.head.matrix.makeBasis(hx.clone().multiplyScalar(R*0.94),hy.clone().multiplyScalar(R*1.14),hz.clone().multiplyScalar(R*1.04)).setPosition(headC);
-  // 머리카락: 정수리에서 뒤통수 쪽으로 기울인 반구
-  const ty=hy.clone().multiplyScalar(Math.cos(0.62)).addScaledVector(hz,-Math.sin(0.62)), tz=new THREE.Vector3().crossVectors(hx,ty);
-  M.makeBasis(hx.clone().multiplyScalar(R*1.0),ty.multiplyScalar(R*1.22),tz.multiplyScalar(R*1.1)).setPosition(headC); hairMesh.setMatrixAt(n,M);
+}
+const REST_INV=(()=>{ const m=Array.from({length:BN.COUNT},()=>new THREE.Matrix4()); computeFrames(REST,1,m); return m.map(x=>x.clone().invert()); })();
+
+// 몸 메시 만들기: 가로 고리(ring)를 층층이 이어 붙여(loft) 몸통·팔·다리를 만든다. 고리마다 어느 뼈를 따를지(가중치)와 부위(색)를 정한다
+function buildBodyGeometry(){
+  const N=14, pos=[], cen=[], uv=[], si=[], sw=[], part=[], idx=[];
+  const vert=(p,c,w,prt,t)=>{ pos.push(p[0],p[1],p[2]); cen.push(c[0],c[1],c[2]); si.push(w[0],w[2]||0,0,0); sw.push(w[1],w[3]||0,0,0); part.push(prt); uv.push(t?t[0]:0.5,t?t[1]:0.02); return pos.length/3-1; };
+  const hRing=(cx,y,cz,rx,rz)=>({ c:[cx,y,cz], pts:Array.from({length:N+1},(_,k)=>{ const th=k/N*Math.PI*2-Math.PI/2; return [cx+Math.cos(th)*rx,y,cz+Math.sin(th)*rz]; }) });
+  const xRing=(x,cy,cz,hh,hw)=>({ c:[x,cy,cz], pts:Array.from({length:N+1},(_,k)=>{ const th=k/N*Math.PI*2; return [x,cy+Math.sin(th)*hh,cz+Math.cos(th)*hw]; }) });
+  const loft=(rings,capA,capB)=>{                          // capA/capB: 처음·끝을 막는 뚜껑(바깥으로 볼록한 방향 벡터)
+    let prev=null; const ids=[];
+    for (const r of rings){ const a=pos.length/3; r.pts.forEach((p,k)=>vert(p,r.c,r.w,r.part,r.v!=null?[k/N,r.v]:null));
+      if (prev!==null) for (let k=0;k<N;k++) idx.push(prev+k,a+k,prev+k+1, prev+k+1,a+k,a+k+1);
+      prev=a; ids.push(a); }
+    for (const [cap,a,r] of [[capA,ids[0],rings[0]],[capB,ids[ids.length-1],rings[rings.length-1]]]) if (cap){
+      const cv=vert([r.c[0]+cap[0],r.c[1]+cap[1],r.c[2]+cap[2]],[r.c[0]-cap[0]*4,r.c[1]-cap[1]*4,r.c[2]-cap[2]*4],r.w,r.part,null);
+      for (let k=0;k<N;k++) idx.push(cv,a+k,a+k+1); }
+  };
+  const H=(y,rx,rz,w,prt,o={})=>Object.assign(hRing(o.cx||0,y,o.cz||0,rx,rz),{ w, part:prt, v:o.v });
+  const blob=(c,r,prt,w)=>loft([-55,-18,18,55].map(d=>{ const f=d*Math.PI/180; return H(c[1]+Math.sin(f)*r[1],Math.cos(f)*r[0],Math.cos(f)*r[2],w,prt,{cx:c[0],cz:c[2]}); }),[0,-r[1]*0.2,0],[0,r[1]*0.2,0]);
+  const P=BN.PELVIS, C=BN.CHEST, HD=BN.HEAD, vOf=y=>0.1+(y-0.9)/0.66*0.9;
+  // 골반(반바지 윗부분)
+  loft([H(0.84,0.07,0.11,[P,1],PT.SHORTS),H(0.90,0.115,0.172,[P,1],PT.SHORTS),H(0.97,0.122,0.18,[P,1],PT.SHORTS),H(1.03,0.118,0.172,[P,1],PT.SHORTS)],[0,-0.02,0]);
+  // 상의: 허리가 잘록하고 가슴·어깨가 넓은 역삼각형 체형. 이 부분만 유니폼 그림(등번호)을 입힌다
+  loft([[0.895,0.136,0.214,[P,1]],[0.97,0.134,0.206,[P,1]],[1.06,0.12,0.172,[P,1]],[1.13,0.108,0.158,[P,0.5,C,0.5]],[1.24,0.118,0.178,[C,1]],[1.35,0.13,0.198,[C,1]],[1.43,0.12,0.207,[C,1]],[1.49,0.092,0.142,[C,1]],[1.545,0.066,0.076,[C,1]]]
+    .map(([y,rx,rz,w])=>H(y,rx,rz,w,PT.TEX,{v:vOf(y)})).concat([H(1.545,0.066,0.076,[C,1],PT.TRIM),H(1.562,0.061,0.068,[C,1],PT.TRIM)]));
+  // 목과 머리
+  loft([H(1.52,0.058,0.062,[C,0.5,HD,0.5],PT.SKIN),H(1.61,0.054,0.057,[HD,1],PT.SKIN)]);
+  loft([-68,-42,-15,12,38,62,80].map(d=>{ const f=d*Math.PI/180; return H(1.705+Math.sin(f)*0.118,Math.cos(f)*0.098,Math.cos(f)*0.08,[HD,1],PT.SKIN,{cx:0.02+(f<0?0.012*-Math.sin(f):0)}); }),[0,-0.01,0],[0,0.006,0]);
+  loft([8,30,52,72,84].map(d=>{ const f=d*Math.PI/180, s=Math.sin(f); return H(1.71+s*0.128,Math.cos(f)*0.106,Math.cos(f)*0.088,[HD,1],PT.HAIR,{cx:0.02-(1-s)*0.032}); }),null,[0,0.006,0]);   // 짧은 머리: 앞이마는 드러나게 뒤로 물림
+  for (const s of [-1,1]){
+    blob([0.105,1.722,s*0.032],[0.008,0.01,0.015],PT.DARK,[HD,1]); blob([0.104,1.748,s*0.034],[0.007,0.006,0.024],PT.HAIR,[HD,1]); blob([0.02,1.70,s*0.082],[0.014,0.026,0.008],PT.SKIN,[HD,1]);
+  }
+  blob([0.118,1.70,0],[0.015,0.022,0.012],PT.SKIN,[HD,1]);
+  for (const s of [-1,1]){
+    const R=s>0?1:0, T=BN.THIGH+R, SH=BN.SHIN+R, F=BN.FOOT+R, UA=BN.UARM+R, FA=BN.FARM+R, z=s*0.115, zs=s*0.105;
+    // 다리: 반바지 자락 → 허벅지(피부) → 무릎 아래 양말 → 발목 흰 띠
+    loft([H(0.97,0.1,0.098,[P,0.5,T,0.5],PT.SHORTS,{cz:zs}),H(0.88,0.106,0.104,[T,1],PT.SHORTS,{cz:zs}),H(0.76,0.105,0.103,[T,1],PT.SHORTS,{cz:z}),H(0.64,0.104,0.102,[T,1],PT.SHORTS,{cz:z}),
+          H(0.64,0.106,0.104,[T,1],PT.HEM,{cz:z}),H(0.62,0.106,0.104,[T,1],PT.HEM,{cz:z}),H(0.62,0.07,0.07,[T,1],PT.HEM,{cz:z})]);
+    loft([H(0.73,0.088,0.086,[T,1],PT.SKIN,{cz:z}),H(0.62,0.082,0.08,[T,1],PT.SKIN,{cz:z}),H(0.54,0.071,0.069,[T,0.75,SH,0.25],PT.SKIN,{cz:z}),H(0.50,0.067,0.065,[T,0.5,SH,0.5],PT.SKIN,{cz:z}),H(0.44,0.062,0.06,[SH,1],PT.SKIN,{cz:z})]);
+    loft([H(0.485,0.06,0.058,[SH,0.7,T,0.3],PT.SOCK,{cz:z}),H(0.485,0.071,0.069,[SH,0.7,T,0.3],PT.SOCK,{cz:z}),H(0.44,0.072,0.07,[SH,1],PT.SOCK,{cz:z}),H(0.36,0.079,0.073,[SH,1],PT.SOCK,{cz:z,cx:-0.014}),H(0.24,0.062,0.059,[SH,1],PT.SOCK,{cz:z,cx:-0.007}),
+          H(0.13,0.046,0.045,[SH,1],PT.SOCK,{cz:z}),H(0.095,0.044,0.043,[SH,0.6,F,0.4],PT.SOCK,{cz:z}),H(0.095,0.044,0.043,[SH,0.6,F,0.4],PT.WHITE,{cz:z}),H(0.06,0.043,0.042,[F,1],PT.WHITE,{cz:z})]);
+    // 축구화
+    loft([[-0.078,0.042,0.026,0.028,PT.ACCENT],[-0.045,0.052,0.046,0.04,PT.BOOT],[0.0,0.058,0.056,0.045,PT.BOOT],[0.065,0.045,0.04,0.048,PT.BOOT],[0.125,0.034,0.028,0.043,PT.BOOT],[0.165,0.028,0.02,0.032,PT.ACCENT],[0.185,0.024,0.012,0.02,PT.ACCENT]]
+      .map(([x,cy,hh,hw,prt])=>Object.assign(xRing(x,cy,z,hh,hw),{ w:[F,1], part:prt })),[-0.012,0,0],[0.01,0,0]);
+    // 팔: 긴소매 → 소매 끝단 → 손
+    const az=y=>s*(y>1.19?0.21+(1.46-y)/0.27*0.03:0.24+(1.19-y)/0.25*0.01);
+    loft([H(1.495,0.04,0.04,[C,0.6,UA,0.4],PT.SHIRT,{cz:s*0.2}),H(1.455,0.066,0.064,[UA,0.8,C,0.2],PT.SHIRT,{cz:az(1.455)}),H(1.37,0.06,0.058,[UA,1],PT.SHIRT,{cz:az(1.37)}),H(1.28,0.053,0.052,[UA,1],PT.SHIRT,{cz:az(1.28)}),
+          H(1.22,0.049,0.048,[UA,0.75,FA,0.25],PT.SHIRT,{cz:az(1.22)}),H(1.19,0.048,0.047,[UA,0.5,FA,0.5],PT.SHIRT,{cz:az(1.19)}),H(1.15,0.048,0.047,[FA,0.8,UA,0.2],PT.SHIRT,{cz:az(1.15)}),H(1.05,0.044,0.043,[FA,1],PT.SHIRT,{cz:az(1.05)}),
+          H(0.97,0.039,0.038,[FA,1],PT.SHIRT,{cz:az(0.97)}),H(0.97,0.041,0.04,[FA,1],PT.TRIM,{cz:az(0.97)}),H(0.948,0.041,0.04,[FA,1],PT.TRIM,{cz:az(0.948)}),H(0.948,0.03,0.028,[FA,1],PT.TRIM,{cz:az(0.948)})],[0,0.02,0]);
+    loft([H(0.955,0.03,0.027,[FA,1],PT.HAND,{cz:az(0.955)}),H(0.925,0.03,0.024,[FA,1],PT.HAND,{cz:az(0.925)}),H(0.89,0.037,0.017,[FA,1],PT.HAND,{cz:az(0.89)}),H(0.84,0.033,0.015,[FA,1],PT.HAND,{cz:az(0.84)}),H(0.80,0.018,0.011,[FA,1],PT.HAND,{cz:az(0.80)})],null,[0,-0.008,0]);
+  }
+  // 삼각형이 전부 바깥을 보도록 방향 정리 (고리 중심 → 삼각형 중심 방향이 바깥)
+  for (let i=0;i<idx.length;i+=3){
+    const [a,b,c]=[idx[i],idx[i+1],idx[i+2]], g=k=>[pos[k*3],pos[k*3+1],pos[k*3+2]], q=k=>[cen[k*3],cen[k*3+1],cen[k*3+2]];
+    const A=g(a), Bv=g(b), Cv=g(c), e1=[Bv[0]-A[0],Bv[1]-A[1],Bv[2]-A[2]], e2=[Cv[0]-A[0],Cv[1]-A[1],Cv[2]-A[2]];
+    const n=[e1[1]*e2[2]-e1[2]*e2[1],e1[2]*e2[0]-e1[0]*e2[2],e1[0]*e2[1]-e1[1]*e2[0]], ca=q(a), cb=q(b), cc=q(c);
+    const o=[0,1,2].map(d=>(A[d]+Bv[d]+Cv[d])/3-(ca[d]+cb[d]+cc[d])/3);
+    if (n[0]*o[0]+n[1]*o[1]+n[2]*o[2]<0){ idx[i+1]=c; idx[i+2]=b; }
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute("position",new THREE.Float32BufferAttribute(pos,3)); g.setAttribute("uv",new THREE.Float32BufferAttribute(uv,2));
+  g.setAttribute("skinIndex",new THREE.Uint16BufferAttribute(si,4)); g.setAttribute("skinWeight",new THREE.Float32BufferAttribute(sw,4));
+  g.setIndex(idx); g.computeVertexNormals();
+  return { geo:g, part };
+}
+const BODY=buildBodyGeometry();
+// 유니폼: 0번 팀은 참고 사진의 구성(빨간 긴소매·초록 반바지·빨간 양말·파란 축구화), 1번 팀은 같은 몸에 파란 유니폼
+const KITS=[{ shirt:"#d8232a", trim:"#173626", shorts:"#1f8f4e", hem:"#101a14", sock:"#d8232a", boot:"#2f6fe0", accent:"#c8f03c", num:"#ffffff", gk:"#f2c230", gkShorts:"#2b2f3d" },
+            { shirt:"#2f6bff", trim:"#0f1f4d", shorts:"#f4f4f4", hem:"#1c3f9e", sock:"#2f6bff", boot:"#f2f2f2", accent:"#e8362f", num:"#ffffff", gk:"#35c46a", gkShorts:"#1f3d2a" }];
+function shirtTexture(kit,number,gk){                      // 몸통에 감기는 그림: 가로 = 몸 둘레(왼쪽 옆구리에서 시작, 앞 0.25, 뒤 0.75), 세로 = 높이
+  const base=gk?kit.gk:kit.shirt;
+  return canvasTex(256,256,(g,w,h)=>{
+    g.fillStyle="#ffffff"; g.fillRect(0,0,w,h); g.fillStyle=base; g.fillRect(0,0,w,h*0.93);
+    g.fillStyle="rgba(0,0,0,.07)"; for (let x=3;x<w;x+=7) g.fillRect(x,0,1.5,h*0.93);       // 잔잔한 세로 결
+    g.strokeStyle=kit.trim; g.lineWidth=7; g.lineJoin="round";                               // 브이넥 목깃
+    g.beginPath(); g.moveTo(w*0.25-22,0); g.lineTo(w*0.25,26); g.lineTo(w*0.25+22,0); g.stroke(); g.fillStyle=kit.trim; g.fillRect(0,0,w,4);
+    g.save(); g.translate(w,0); g.scale(-1,1);                                               // 글자가 뒤집혀 보이지 않게 좌우 반전해서 그림
+    g.fillStyle=gk?"#101418":kit.num; g.textAlign="center"; g.textBaseline="middle";
+    g.font="bold 30px system-ui,sans-serif"; g.fillText(number,w-(w*0.25+20),h*0.27);        // 가슴(선수의 오른쪽)
+    g.font="bold 84px system-ui,sans-serif"; g.fillText(number,w-w*0.75,h*0.33);             // 등
+    g.restore();
+  });
+}
+const rig=[];                                              // 선수별 메시와 뼈
+const jw=Array.from({length:33},()=>new V3());             // 관절의 세계 좌표
+function buildPlayers3D(){
+  const col=new THREE.Color();
+  players.forEach(p=>{
+    const kit=KITS[p.team], pal=[]; pal[PT.SKIN]=p.skin; pal[PT.SHIRT]=p.gk?kit.gk:kit.shirt; pal[PT.SHORTS]=p.gk?kit.gkShorts:kit.shorts; pal[PT.SOCK]=p.gk?kit.gk:kit.sock;
+    pal[PT.BOOT]=kit.boot; pal[PT.HAIR]=HAIRS[(p.i*3+p.team)%HAIRS.length]; pal[PT.TRIM]=kit.trim; pal[PT.HEM]=kit.hem; pal[PT.ACCENT]=kit.accent; pal[PT.WHITE]="#f4f4f4";
+    pal[PT.HAND]=p.gk?"#f1f1f1":p.skin; pal[PT.DARK]="#1a1410"; pal[PT.TEX]="#ffffff";
+    const cols=new Float32Array(BODY.part.length*3); BODY.part.forEach((t,k)=>{ col.set(pal[t]); cols[k*3]=col.r; cols[k*3+1]=col.g; cols[k*3+2]=col.b; });
+    const g=new THREE.BufferGeometry();                    // 모양은 모두 같은 데이터를 함께 쓰고, 색만 선수마다 따로
+    for (const n of ["position","normal","uv","skinIndex","skinWeight"]) g.setAttribute(n,BODY.geo.getAttribute(n));
+    g.setIndex(BODY.geo.getIndex()); g.setAttribute("color",new THREE.BufferAttribute(cols,3));
+    const mesh=new THREE.SkinnedMesh(g,new THREE.MeshStandardMaterial({ map:shirtTexture(kit,p.gk?1:p.i+1,p.gk), vertexColors:true, roughness:0.82 }));
+    const bones=Array.from({length:BN.COUNT},()=>new THREE.Bone());
+    mesh.bind(new THREE.Skeleton(bones,REST_INV.map(m=>m.clone())),new THREE.Matrix4());
+    mesh.castShadow=true; mesh.frustumCulled=false; scene.add(mesh);
+    rig.push({ mesh, mats:bones.map(b=>b.matrixWorld) });
+  });
+}
+const HAIRS=["#1a1512","#151515","#3a2717","#1a1512"];
+function poseToMesh(p,n){                                  // 포즈 관절 → 세계 좌표 → 뼈 행렬
+  const K=CONFIG.size.player, fx=Math.cos(p.a), fz=Math.sin(p.a), sx=-fz, sz=fx;
+  for (let i=0;i<33;i++){ const l=p.lm[i]; jw[i].set(p.x+(fx*l[0]+sx*l[2])*K, l[1]*K, p.z+(fz*l[0]+sz*l[2])*K); }
+  computeFrames(jw,K,rig[n].mats);
 }
 
 /* ----- 공, 조작 표시 ----- */
@@ -1034,23 +1075,21 @@ function drawOverlay(){
   ctx.strokeStyle="rgba(255,255,255,.55)"; ctx.lineWidth=1; ctx.stroke();
   ctx.beginPath(); ctx.moveTo(rx+rw/2,ry); ctx.lineTo(rx+rw/2,ry+rh); ctx.stroke();
   const mx=x=>rx+4+(x+HL)/(2*HL)*(rw-8), mz=z=>ry+4+(z+HW)/(2*HW)*(rh-8);
-  for (const p of players){ ctx.fillStyle=p===S.ctrl?"#ffd84a":p.team?"#ff7a7d":"#7fa6ff"; ctx.beginPath(); ctx.arc(mx(p.x),mz(p.z),2.3,0,7); ctx.fill(); }
+  for (const p of players){ ctx.fillStyle=p===S.ctrl?"#ffd84a":p.team?"#7fa6ff":"#ff7a7d"; ctx.beginPath(); ctx.arc(mx(p.x),mz(p.z),2.3,0,7); ctx.fill(); }
   ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(mx(clamp(ball.x,-HL,HL)),mz(clamp(ball.z,-HW,HW)),2.2,0,7); ctx.fill();
   const on=stick.id!==null, ox=on?stick.ox:92, oy=on?stick.oy:H-92;      // 가상 스틱 (쉬는 동안엔 흐리게)
   ctx.fillStyle=`rgba(255,255,255,${on?0.12:0.06})`; ctx.beginPath(); ctx.arc(ox,oy,54,0,7); ctx.fill();
   ctx.strokeStyle=`rgba(255,255,255,${on?0.5:0.25})`; ctx.lineWidth=2; ctx.stroke();
   ctx.fillStyle=`rgba(255,255,255,${on?0.5:0.22})`; ctx.beginPath(); ctx.arc(ox+stick.x*48,oy+stick.z*48,24,0,7); ctx.fill();
 }
-let rigFor=null;
 function render(){
-  if (rigFor!==players){ buildPlayers3D(); rigFor=players; }                // 다시 시작하면 선수 목록이 새로 만들어짐
+  if (!rig.length) buildPlayers3D();                        // 선수 몸은 한 번만 만든다(다시 시작해도 같은 번호·같은 유니폼)
   // 카메라: 2D 버전과 같은 위치·각도 계산을 그대로 사용
   const cc=CONFIG.cam;
   camera.position.set(cam.x,cc.h,cam.z); camera.rotation.set(-cc.pitch*Math.PI/180,-cam.yaw,0,"YXZ"); camera.updateMatrixWorld(); camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
   sun.target.position.set(cam.tx,0,cam.tz-6); sun.position.set(cam.tx-24,46,cam.tz-6+20);   // 카메라 쪽 왼편 위에서 비춰 선수 앞면이 밝게, 그림자는 오른쪽 뒤로
   ctx.clearRect(0,0,W,H);
   players.forEach((p,n)=>{ updatePose(p); poseToMesh(p,n); if (showPose) drawPoseOverlay(p); });
-  cylMesh.instanceMatrix.needsUpdate=sphMesh.instanceMatrix.needsUpdate=hairMesh.instanceMatrix.needsUpdate=true;
   const br=BR*CONFIG.size.ball*1.15; ballMesh.scale.setScalar(br); ballMesh.position.set(ball.x,Math.max(br,ball.y+br-BR),ball.z);
   const sp=Math.hypot(ball.vx,ball.vz), dSpin=ball.spin-lastSpin; lastSpin=ball.spin;
   if (sp>0.2){ spinAxis.set(ball.vz/sp,0,-ball.vx/sp); ballMesh.quaternion.premultiply(spinQ.setFromAxisAngle(spinAxis,dSpin)); }
