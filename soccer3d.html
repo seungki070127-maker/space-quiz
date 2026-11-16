@@ -133,7 +133,7 @@ const CONFIG = {
   landMark: { size: 0.9, minHeight: 0.4 },   // 공 낙하 지점 X 표시: size = 크기, minHeight = 공이 이보다 높이 떠야 표시(m)
   pitchLook: { stripe: 10 },   // 잔디 줄무늬 폭(비율미터, 경기장 가로 = 100)
   ballBody: { hitScale: 1.0, magnus: 0, spinDecay: 0.8 },   // 공 판정: hitScale = 몸에 닿는 크기(1 = 화면에 보이는 크기), magnus = 회전이 휘게 하는 세기(0 = 끔), spinDecay = 회전이 줄어드는 빠르기
-  airKick: { reach: 0.6, jump: 0.55, headMin: 1.45, hold: 2.5, headPower: 0.65, volleyError: 0.05 },   // 공중볼 차기: reach = 몸에서 공까지 닿는 여유(m), jump = 헤딩 점프 최대 높이(m), headMin = 이 높이(선수 기준 m)보다 높으면 헤딩·아래면 발리, hold = 버튼을 뗀 뒤 공을 기다리는 시간(초), headPower = 헤딩 세기 배율, volleyError = 발리슛 추가 오차
+  airKick: { reach: 0.6, jump: 0.55, headMin: 1.45, hold: 3, headPower: 0.65, volleyError: 0.05 },   // 공중볼 차기: reach = 몸에서 공까지 닿는 여유(m), jump = 헤딩 점프 최대 높이(m), headMin = 이 높이(선수 기준 m)보다 높으면 헤딩·아래면 발리, hold = 버튼을 뗀 뒤 공을 기다리는 시간(초, 땅볼·공중볼 모두), headPower = 헤딩 세기 배율, volleyError = 발리슛 추가 오차
   autoSwitch: { every: 0.12, margin: 1.5 },   // 패스 중 자동 선수 전환: 검사 주기(초), 이만큼(m) 더 가까워야 전환
   player: { speed: 10.5, dribble: 0.9, accel: 7, cpuSpeed: 0.93, control: 1.35, controlHeight: 1.6 },   // control: 이 거리 안에 공이 오면 받는다, controlHeight: 이 높이 아래의 공만
   charge: { time: 0.9, min: 0.1, tap: 0.2, pressTime: 1.5 },   // 100%까지 걸리는 시간, 이보다 짧으면 '한 번 누름', 압박 지속 시간
@@ -239,9 +239,9 @@ function release(type){
   S.charge=null;
   if (S.mode!=="playing" || S.dead) return;
   const c=S.ctrl, power=clamp(ch.t/CONFIG.charge.time, CONFIG.charge.min, 1);
-  if (!ball.owner && ballAirborne()){                      // 공중볼: 닿으면 바로 헤딩·발리, 아직 멀면(꾹 눌렀다 뗐을 때) 공이 올 때까지 기다렸다가 찬다
-    const info=airReachable(c);
-    if (info) return execAirKick(c,type,power,info);
+  if (!ball.owner){                                        // 공이 누구 것도 아님: 닿으면 바로 차고, 아직 멀면(꾹 눌렀다 뗐을 때) 공이 올 때까지 기다렸다가 누른 세기로 찬다
+    if (ballAirborne()){ const info=airReachable(c); if (info) return execAirKick(c,type,power,info); }
+    else if (c.cool<=0 && dist(c,ball)<1.5) return userKick(c,type,power);
     if (ch.t>CONFIG.charge.tap){ S.air={ type, power, until:S.time+CONFIG.airKick.hold }; return; }
   }
   if (ball.owner===c || (!ball.owner && c.cool<=0 && dist(c,ball)<1.5 && ball.y<2.3)) return userKick(c,type,power);
@@ -535,6 +535,7 @@ function airReachable(p){                                   // 공이 지금 이
   return { mode: h>=c.headMin ? "header" : "volley", h };
 }
 function airTarget(p){                                      // 기다리는 동안 갈 곳: 공이 찰 수 있는 높이로 지나가는 지점 중 제때 닿을 수 있고 지금 자리에서 가장 가까운 곳
+  if (!ballAirborne()) return interceptPoint(p);           // 굴러가는 공은 받는 지점으로
   const K=CONFIG.size.player, c=CONFIG.airKick, f=predictFlight(), sp=CONFIG.player.speed, L=ballLift();
   let best=null, bd=1e9;
   for (const s_ of f.path){ if ((s_.y+L)/K>1.8+c.jump) continue; const d=hyp(s_.x-p.x,s_.z-p.z);
@@ -563,10 +564,12 @@ function execAirKick(p,type,power,info){
   else { p.volleyLift=clamp((info.h-0.3)/1.1,0,1)*0.9; ballTouch(p,info.h>0.7?"thigh":"foot"); }
   sfx.kick(power*(head?0.6:1));
 }
-function airKickTick(){                                     // 버튼을 뗀 뒤 공을 기다리는 중: 닿으면 차고, 공이 땅에 닿거나 시간이 지나면 취소
+function airKickTick(){                                     // 버튼을 뗀 뒤 공을 기다리는 중: 공이 범위에 들어오면 누른 세기로 차고(공중이면 헤딩·발리, 땅이면 원터치), 누가 잡거나 시간이 지나면 취소
   const a=S.air; if (!a) return;
-  if (S.dead || ball.owner || S.time>a.until || !ballAirborne()){ S.air=null; return; }
-  const info=airReachable(S.ctrl); if (info) execAirKick(S.ctrl,a.type,a.power,info);
+  const c=S.ctrl;
+  if (S.dead || ball.owner || S.time>a.until){ S.air=null; return; }
+  if (ballAirborne()){ const info=airReachable(c); if (info) execAirKick(c,a.type,a.power,info); return; }
+  if (c.cool<=0 && c.stun<=0 && dist(c,ball)<CONFIG.player.control && ball.y<CONFIG.player.controlHeight){ S.air=null; userKick(c,a.type,a.power); }
 }
 function chasePoint(p){
   if (ball.y>1.5 && !ball.owner){                         // 뜬 공은 낙하지점으로
