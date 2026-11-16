@@ -133,6 +133,7 @@ const CONFIG = {
   landMark: { size: 0.9, minHeight: 0.4 },   // 공 낙하 지점 X 표시: size = 크기, minHeight = 공이 이보다 높이 떠야 표시(m)
   pitchLook: { stripe: 10 },   // 잔디 줄무늬 폭(비율미터, 경기장 가로 = 100)
   ballBody: { hitScale: 1.0, magnus: 0, spinDecay: 0.8 },   // 공 판정: hitScale = 몸에 닿는 크기(1 = 화면에 보이는 크기), magnus = 회전이 휘게 하는 세기(0 = 끔), spinDecay = 회전이 줄어드는 빠르기
+  airKick: { reach: 0.6, jump: 0.55, headMin: 1.45, hold: 2.5, headPower: 0.65, volleyError: 0.05 },   // 공중볼 차기: reach = 몸에서 공까지 닿는 여유(m), jump = 헤딩 점프 최대 높이(m), headMin = 이 높이(선수 기준 m)보다 높으면 헤딩·아래면 발리, hold = 버튼을 뗀 뒤 공을 기다리는 시간(초), headPower = 헤딩 세기 배율, volleyError = 발리슛 추가 오차
   autoSwitch: { every: 0.12, margin: 1.5 },   // 패스 중 자동 선수 전환: 검사 주기(초), 이만큼(m) 더 가까워야 전환
   player: { speed: 10.5, dribble: 0.9, accel: 7, cpuSpeed: 0.93, control: 1.35, controlHeight: 1.6 },   // control: 이 거리 안에 공이 오면 받는다, controlHeight: 이 높이 아래의 공만
   charge: { time: 0.9, min: 0.1, tap: 0.2, pressTime: 1.5 },   // 100%까지 걸리는 시간, 이보다 짧으면 '한 번 누름', 압박 지속 시간
@@ -185,7 +186,7 @@ function kickoff(team){
   Object.assign(ball, { x:0, y:BR, z:0, vx:0, vy:0, vz:0, owner:null, last:team, spin:0 }); ballReset();
   for (const p of players) if (p.team!==team && hyp(p.x,p.z)<CR+1) p.x=-(CR+1.5)*p.dir;   // 상대는 센터서클 밖
   const k = players[team*11+9]; k.x=-0.6*k.dir; k.z=0;
-  S.dead=false; S.scorer=-1; S.charge=null; S.press=0;
+  S.dead=false; S.scorer=-1; S.charge=null; S.press=0; S.air=null;
   S.ctrl = players[9];
   setOwner(k);
   S.freeze = 1.3; say("킥오프", 1.2); sfx.whistle();
@@ -238,6 +239,11 @@ function release(type){
   S.charge=null;
   if (S.mode!=="playing" || S.dead) return;
   const c=S.ctrl, power=clamp(ch.t/CONFIG.charge.time, CONFIG.charge.min, 1);
+  if (!ball.owner && ballAirborne()){                      // 공중볼: 닿으면 바로 헤딩·발리, 아직 멀면(꾹 눌렀다 뗐을 때) 공이 올 때까지 기다렸다가 찬다
+    const info=airReachable(c);
+    if (info) return execAirKick(c,type,power,info);
+    if (ch.t>CONFIG.charge.tap){ S.air={ type, power, until:S.time+CONFIG.airKick.hold }; return; }
+  }
   if (ball.owner===c || (!ball.owner && c.cool<=0 && dist(c,ball)<1.5 && ball.y<2.3)) return userKick(c,type,power);
   if (ch.own || ch.t>CONFIG.charge.tap) return;
   if (type==="pass") switchPlayer();
@@ -260,7 +266,7 @@ function doKick(p,vx,vy,vz,power){
   if (ball.owner===p && (p.gk || dist(p,ball)>1.8*CONFIG.size.player)){ ball.x=p.x+Math.cos(p.a)*0.6; ball.z=p.z+Math.sin(p.a)*0.6; ball.y=p.gk?0.4:BR; }   // 드리블 중엔 공이 있는 자리에서 그대로 찬다
   ball.owner=null; ball.vx=vx; ball.vy=vy; ball.vz=vz; ball.last=p.team; ballTouch(p,p.gk&&ball.y>0.3?"hand":"foot");
   if (p.gk && S.ctrl===p) switchPlayer();
-  p.cool=0.45; p.kickT=0.28; p.a=Math.atan2(vz,vx); p.hold=0;
+  p.cool=0.45; p.kickT=0.28; p.a=Math.atan2(vz,vx); p.hold=0; p.volleyLift=0;
   sfx.kick(power??0.5);
 }
 function setRecv(p,m){ S.recv[p.team]=m; if (p.team===0 && !m.gk) S.ctrl=m; }
@@ -336,7 +342,7 @@ function possession(dt){
           if (sp<12 || Math.random()<CONFIG.gk.catch){ p.dive=0; setOwner(p); return; }
           ball.vx*=-0.3; ball.vz+=p.diveDir*5+rnd(-2,2); ball.vy=rnd(3,5); ball.last=p.team; p.cool=0.5; sfx.post(); return;
         }
-      } else if (ball.y<CONFIG.player.controlHeight && d<bd){ bd=d; best=p; }
+      } else if (ball.y<CONFIG.player.controlHeight && d<bd && !(S.air && p===S.ctrl)){ bd=d; best=p; }
     }
     if (best){
       if (sp>19 && best!==S.recv[best.team]){             // 강한 공은 몸에 맞고 튕김
@@ -488,7 +494,7 @@ function goal(team){
   S.pending={ t:2.8, fn:()=>kickoff(1-team) };
 }
 function setPiece(team,x,z,label,byGk){
-  S.dead=true; S.charge=null; S.press=0; say(label,1.1); sfx.whistle();
+  S.dead=true; S.charge=null; S.press=0; S.air=null; say(label,1.1); sfx.whistle();
   S.pending={ t:0.9, fn:()=>{
     Object.assign(ball,{ x, y:BR, z, vx:0, vy:0, vz:0, owner:null }); ballReset();
     let taker=null, bd=1e9;
@@ -519,6 +525,48 @@ function interceptPoint(p){
     const nv=Math.max(0,v-(c.roll*v+c.rollFlat)*DT); vx*=nv/v; vz*=nv/v; bx+=vx*DT; bz+=vz*DT;
   }
   return [clamp(bx,-HL-1,HL+1), clamp(bz,-HW-1,HW+1)];
+}
+/* ----- 공중볼 차기(헤딩·발리) ----- */
+const ballAirborne=()=>ball.y>BR+0.05 || ball.vy>0.3;
+function airReachable(p){                                   // 공이 지금 이 선수가 찰 수 있는 곳에 있으면 { mode, h }
+  if (ball.owner || !ballAirborne() || p.cool>0 || p.stun>0 || p.slideT>0) return null;
+  const K=CONFIG.size.player, c=CONFIG.airKick, by=ball.y+ballLift(), h=by/K, dh=hyp(ball.x-p.x,ball.z-p.z);
+  if (dh>(0.45+c.reach)*K || h<0.12 || h>1.8+c.jump) return null;
+  return { mode: h>=c.headMin ? "header" : "volley", h };
+}
+function airTarget(p){                                      // 기다리는 동안 갈 곳: 공이 찰 수 있는 높이로 지나가는 지점 중 제때 닿을 수 있고 지금 자리에서 가장 가까운 곳
+  const K=CONFIG.size.player, c=CONFIG.airKick, f=predictFlight(), sp=CONFIG.player.speed, L=ballLift();
+  let best=null, bd=1e9;
+  for (const s_ of f.path){ if ((s_.y+L)/K>1.8+c.jump) continue; const d=hyp(s_.x-p.x,s_.z-p.z);
+    if (d-(0.45+c.reach)*K*0.6 <= sp*Math.max(0,s_.t-0.15) && d<bd-0.05){ bd=d; best=[s_.x,s_.z]; } }
+  return best || f.land || [ball.x,ball.z];
+}
+function execAirKick(p,type,power,info){
+  const iv=inputVec(), aimed=iv.m>0.3, c=CONFIG.airKick, K=CONFIG.size.player;
+  const ax=aimed?iv.x/iv.m:p.dir, az=aimed?iv.z/iv.m:0, head=info.mode==="header", hp=head?c.headPower:1;   // 조준 안 하면 상대 골대 방향
+  S.air=null; p.a=Math.atan2(az,ax); p.vx*=0.4; p.vz*=0.4;
+  if (type==="pass"){
+    const pc=CONFIG.pass, v=(pc.min+(pc.max-pc.min)*power)*hp, m=pickMate(p,ax,az,pc.wantMin+(pc.wantMax-pc.wantMin)*power*hp,pc.angle,3);
+    doKick(p,ax*v,head?0.8:0.4,az*v,power); if (m) setRecv(p,m);
+  } else if (type==="cross"){
+    const cc=CONFIG.cross, d=(cc.min+(cc.max-cc.min)*power)*hp, m=pickMate(p,ax,az,d,cc.assist,10);
+    crossTo(p,p.x+ax*d,p.z+az*d,m);
+  } else {
+    const sc=CONFIG.shot, gx=HL*p.dir, gd=hyp(gx-p.x,p.z)||1, toGoal=!aimed || (ax*(gx-p.x)+az*(-p.z))/gd>-0.2;
+    const gkp=players[(1-p.team)*11], tz=aimed?clamp(az*5,-sc.aimWidth,sc.aimWidth):(gkp.z>0?-1:1)*GW*0.72;
+    const a=toGoal?Math.atan2(tz-p.z,gx-p.x)+rnd(-1,1)*(sc.error+sc.errorPow*power+(head?0.04:c.volleyError)):Math.atan2(az,ax);
+    const v=(sc.min+(sc.max-sc.min)*power)*hp;
+    const vy=head ? clamp(-1.5+gd*0.06,-2,3) : (sc.liftBase+sc.liftPow*power*power)*0.55+gd*0.03;   // 헤딩은 내려찍듯, 발리는 낮게
+    doKick(p,Math.cos(a)*v,vy,Math.sin(a)*v,power);
+  }
+  if (head){ p.headT=0.45; p.jumpH=clamp(info.h-1.65,0,c.jump); p.kickT=0; ballTouch(p,"head"); }
+  else { p.volleyLift=clamp((info.h-0.3)/1.1,0,1)*0.9; ballTouch(p,info.h>0.7?"thigh":"foot"); }
+  sfx.kick(power*(head?0.6:1));
+}
+function airKickTick(){                                     // 버튼을 뗀 뒤 공을 기다리는 중: 닿으면 차고, 공이 땅에 닿거나 시간이 지나면 취소
+  const a=S.air; if (!a) return;
+  if (S.dead || ball.owner || S.time>a.until || !ballAirborne()){ S.air=null; return; }
+  const info=airReachable(S.ctrl); if (info) execAirKick(S.ctrl,a.type,a.power,info);
 }
 function chasePoint(p){
   if (ball.y>1.5 && !ball.owner){                         // 뜬 공은 낙하지점으로
@@ -680,7 +728,7 @@ function stepPlayers(dt){
   }
   const o=ball.owner;
   for (const p of players){
-    p.cool-=dt; p.kickT-=dt; p.think-=dt;
+    p.cool-=dt; p.kickT-=dt; p.think-=dt; if (p.headT>0) p.headT-=dt;
     if (p.slideT>0){
       p.slideT-=dt; p.x=clamp(p.x+p.vx*dt,-HL-1.5,HL+1.5); p.z=clamp(p.z+p.vz*dt,-HW-1.5,HW+1.5);
       p.vx*=1-1.8*dt; p.vz*=1-1.8*dt; if (p.slideT<=0) p.stun=0.4; continue;
@@ -699,7 +747,7 @@ function stepPlayers(dt){
       const iv=inputVec();
       if (!o && p.cool<=0){                                   // 공이 누구에게도 없음(패스·흘러나온 공): 가장 가까운 선수가 조작되고 있으므로 그 선수가 받으러 감
         // 공 받기: 받을 수 있는 지점으로 자동 이동. 조이스틱을 움직이면 그 방향이 우선이고, 받는 지점 쪽으로 조금씩 끌어 준다
-        const [tx,tz]=interceptPoint(p), dx=tx-p.x, dz=tz-p.z, d=hyp(dx,dz);
+        const [tx,tz]=S.air?airTarget(p):interceptPoint(p), dx=tx-p.x, dz=tz-p.z, d=hyp(dx,dz);
         const agree=iv.m>0.15 && d>0.3 ? (iv.x*dx+iv.z*dz)/(iv.m*d) : 0;
         if (iv.m>0.15 && agree>-0.1){ moveTo(p,tx,tz,sp,dt); }                     // 받는 쪽으로 밀고 있으면: 받는 지점에 멈춰 서도록 도착 제어(지나쳐 달려가지 않게)
         else if (iv.m>0.15){ const a=CONFIG.receive.assist*Math.min(1,d/3); let wx=iv.x+dx/(d||1)*a, wz=iv.z+dz/(d||1)*a; const m=hyp(wx,wz)||1, k=Math.max(iv.m,Math.min(1,m))/m; steer(p,wx*k*sp,wz*k*sp,dt); }
@@ -736,7 +784,7 @@ function update(dt){
   if (S.press>0) S.press-=dt;
   stepPlayers(dt);
   stepBall(dt);
-  if (!S.dead){ possession(dt); autoSwitch(dt); }
+  if (!S.dead){ airKickTick(); possession(dt); autoSwitch(dt); }
   syncHud();
 }
 
@@ -897,7 +945,7 @@ const tmpA=newPose(), tmpB=newPose();
 
 function updatePose(p){
   const lm=p.lm||(p.lm=newPose()), run=p.run||0;
-  const special=p.kickT>0||p.slideT>0||(p.gk&&(p.dive>0||ball.owner===p))||(S.scorer===p.team&&S.dead);
+  const special=p.kickT>0||p.headT>0||p.slideT>0||(p.gk&&(p.dive>0||ball.owner===p))||(S.scorer===p.team&&S.dead);
   const cRun=POSE_CLIPS.run, cIdle=POSE_CLIPS.idle;
   if (special||(!cRun&&!cIdle)){ poseProcedural(p,lm); if (!special) touchPose(p,lm); return; }
   // 포즈 데이터 재생: 달리기는 걸음 위상(p.ph)에 맞춰, 서 있기는 시간에 맞춰 재생하고 속도에 따라 둘을 섞는다
@@ -932,8 +980,10 @@ function poseProcedural(p,lm){
   const diving=p.gk&&p.dive>0, holding=p.gk&&ball.owner===p, cheer=S.scorer===p.team&&S.dead&&!p.gk;
   const kk=p.kickT>0?1-p.kickT/0.28:-1;
   // 몸 전체 기울기: 달릴 때 앞으로, 슬라이딩은 뒤로, 다이빙은 옆으로
-  let lean=mix(0.05+0.17*run,-1.15,slideK); if (kk>=0) lean-=0.14*Math.sin(kk*Math.PI);
-  let ta=Math.sin(lean), uy=Math.cos(lean), ts=0, baseY=0;
+  const hk=p.headT>0?1-p.headT/0.45:-1, vl=kk>=0?(p.volleyLift||0):0;
+  let lean=mix(0.05+0.17*run,-1.15,slideK); if (kk>=0) lean-=(0.14+0.35*vl)*Math.sin(kk*Math.PI);
+  if (hk>=0) lean+=-0.4*Math.sin(Math.min(1,hk/0.45)*Math.PI/2)*(1-sm((hk-0.4)/0.15))+0.45*sm((hk-0.4)/0.15)*(1-sm((hk-0.7)/0.3));   // 젖혔다가 이마로 내려찍기
+  let ta=Math.sin(lean), uy=Math.cos(lean), ts=0, baseY=hk>=0?(p.jumpH||0)*Math.sin(Math.min(1,hk)*Math.PI):0;
   if (diving){ const k=(0.55-p.dive)/0.55, d=p.diveDir*1.25*sm(k*3), wz=Math.sin(d); ta=wz*fz; ts=wz*sz; uy=Math.cos(d); baseY=0.4*Math.sin(Math.min(1,k)*Math.PI); }
   const set=(i,al,h,sd)=>{ const l=lm[i]; l[0]=al+ta*h; l[1]=baseY+uy*h; l[2]=sd+ts*h; };
   const bob=0.05*run*Math.abs(Math.sin(p.ph))+(1-run)*Math.sin(S.time*2.2+p.i)*0.008;
@@ -943,7 +993,8 @@ function poseProcedural(p,lm){
     // 다리
     const ph=s>0?p.ph:p.ph+Math.PI, ha=s*0.115*Math.sin(tw), hs=s*0.115*Math.cos(tw);
     let t=0.06*run+Math.sin(ph)*(0.05+0.95*run), b=0.1+0.25*run+1.7*run*Math.pow(Math.max(0,Math.cos(ph)),1.2);
-    if (kk>=0 && s>0){ const w=sm(kk/0.35), f=sm((kk-0.35)/0.4); t=-0.95*w+2.25*f; b=1.35*w*(1-sm((kk-0.35)/0.3)); }
+    if (kk>=0 && s>0){ const w=sm(kk/0.35), f=sm((kk-0.35)/0.4); t=-0.95*w+(2.25+vl*0.9)*f; b=1.35*w*(1-sm((kk-0.35)/0.3)); }
+    if (hk>=0 && (p.jumpH||0)>0.05){ const j=Math.sin(Math.min(1,hk)*Math.PI); t=mix(t,s>0?0.35:0.15,j); b=mix(b,0.9,j); }
     if (slideK){ t=mix(t,s>0?1.35:0.8,slideK); b=mix(b,s>0?0.05:1.3,slideK); }
     if (diving){ t=s*0.3; b=0.4; }
     const ka=ha+Math.sin(t)*L, kh=hipH-Math.cos(t)*L, fa=ka+Math.sin(t-b)*L, fh=Math.max(0.06,kh-Math.cos(t-b)*L);
@@ -952,7 +1003,8 @@ function poseProcedural(p,lm){
     // 팔 (같은 쪽 다리와 반대로 흔든다)
     const pa=s>0?p.ph+Math.PI:p.ph, sa=-s*0.2*Math.sin(tw*1.2), ss=s*0.21*Math.cos(tw*1.2);
     let at=Math.sin(pa)*(0.08+0.95*run), e=0.25+1.25*run, out=0.03;
-    if (kk>=0){ at=mix(at,s<0?0.9:-0.7,Math.sin(kk*Math.PI)); out=0.12; }
+    if (kk>=0){ at=mix(at,s<0?0.9:-0.7,Math.sin(kk*Math.PI)); out=0.12+0.15*vl; }
+    if (hk>=0){ const j=Math.sin(Math.min(1,hk)*Math.PI); at=mix(at,1.0,j); e=mix(e,0.7,j); out=0.22; }
     if (cheer||diving){ at=2.8; e=0.15; } else if (holding){ at=1.0; e=1.2; } else if (slideK){ at=mix(at,-0.9,slideK); e=0.4; out=0.15; }
     const ea=sa+Math.sin(at)*0.27, eh=shH-Math.cos(at)*0.27, wa=ea+Math.sin(at+e)*0.25, wh=eh-Math.cos(at+e)*0.25, ws=ss+s*out*0.6;
     const fa2=Math.sin(at+e)*0.08, fh2=-Math.cos(at+e)*0.08;   // 손가락은 팔뚝 방향으로 조금 더
@@ -1167,7 +1219,7 @@ function render(){
     const iv=inputVec(), want=iv.m>0.15?Math.atan2(iv.z,iv.x):c.a, K=CONFIG.size.player, CA=CONFIG.arrow;
     arrowA+=Math.atan2(Math.sin(want-arrowA),Math.cos(want-arrowA))*Math.min(1,CA.turn/60);  // 부드럽게 돌아감
     arrow.position.set(c.x+Math.cos(arrowA)*CA.ahead*K, 0.035, c.z+Math.sin(arrowA)*CA.ahead*K);
-    arrow.rotation.y=-arrowA; arrow.scale.setScalar(CA.size*K);
+    arrow.rotation.y=-arrowA; arrow.scale.setScalar(CA.size*K); arrow.material.color.set(S.air?0xffd84a:0xffffff);   // 공중볼을 기다리는 중이면 노랑
   }
   const lp=S.mode!=="title" && !S.dead ? landingPoint() : null; landMark.visible=!!lp;
   if (lp){ landMark.position.set(lp[0],0.04,lp[1]); landMark.scale.setScalar(CONFIG.landMark.size*CONFIG.size.player); }
@@ -1224,7 +1276,7 @@ $("bMute").onclick=()=>{ muted=!muted; const b=$("bMute"); b.textContent=muted?"
 
 muted=true; resetState(); muted=false;                    // 타이틀 배경용 초기 배치(소리 없이)
 $("msg").hidden=true; setMode("title");
-window.GAME={ S, CONFIG, ball, HL, HW, BALL_HOOKS, predictFlight, flightNear, ballHits, bodyParts, get players(){ return players; }, update, press, release, render, proj, updatePose, poseProcedural, renderer, scene, camera, cam,
+window.GAME={ S, CONFIG, ball, HL, HW, airReachable, execAirKick, BALL_HOOKS, predictFlight, flightNear, ballHits, bodyParts, get players(){ return players; }, update, press, release, render, proj, updatePose, poseProcedural, renderer, scene, camera, cam,
   LM, POSE_CONNECTIONS, POSE_CLIPS, loadPoseClip, fromMediaPipe, togglePose };   // 포즈 데이터 연결용
 requestAnimationFrame(t=>{ last=t; requestAnimationFrame(frame); });
 })();
