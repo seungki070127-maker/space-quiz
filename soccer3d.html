@@ -132,6 +132,7 @@ const CONFIG = {
   arrow:  { ahead: 1.25, size: 1.15, turn: 14 },   // 방향 화살표: ahead = 발 앞 거리(m), size = 크기, turn = 방향 바뀌는 빠르기
   landMark: { size: 0.9, minHeight: 0.4 },   // 공 낙하 지점 X 표시: size = 크기, minHeight = 공이 이보다 높이 떠야 표시(m)
   pitchLook: { stripe: 10 },   // 잔디 줄무늬 폭(비율미터, 경기장 가로 = 100)
+  ballBody: { hitScale: 1.0, magnus: 0, spinDecay: 0.8 },   // 공 판정: hitScale = 몸에 닿는 크기(1 = 화면에 보이는 크기), magnus = 회전이 휘게 하는 세기(0 = 끔), spinDecay = 회전이 줄어드는 빠르기
   autoSwitch: { every: 0.12, margin: 1.5 },   // 패스 중 자동 선수 전환: 검사 주기(초), 이만큼(m) 더 가까워야 전환
   player: { speed: 10.5, dribble: 0.9, accel: 7, cpuSpeed: 0.93, control: 1.35, controlHeight: 1.6 },   // control: 이 거리 안에 공이 오면 받는다, controlHeight: 이 높이 아래의 공만
   charge: { time: 0.9, min: 0.1, tap: 0.2, pressTime: 1.5 },   // 100%까지 걸리는 시간, 이보다 짧으면 '한 번 누름', 압박 지속 시간
@@ -181,7 +182,7 @@ function resetState(){
 }
 function kickoff(team){
   for (const p of players){ p.x=p.hx*p.dir; p.z=p.hz; p.vx=p.vz=0; p.a=p.dir>0?0:Math.PI; p.slideT=p.stun=p.cool=p.dive=0; p.rt=null; }
-  Object.assign(ball, { x:0, y:BR, z:0, vx:0, vy:0, vz:0, owner:null, last:team, spin:0 });
+  Object.assign(ball, { x:0, y:BR, z:0, vx:0, vy:0, vz:0, owner:null, last:team, spin:0 }); ballReset();
   for (const p of players) if (p.team!==team && hyp(p.x,p.z)<CR+1) p.x=-(CR+1.5)*p.dir;   // 상대는 센터서클 밖
   const k = players[team*11+9]; k.x=-0.6*k.dir; k.z=0;
   S.dead=false; S.scorer=-1; S.charge=null; S.press=0;
@@ -257,7 +258,7 @@ function slide(p){
 /* ===== 킥 ===== */
 function doKick(p,vx,vy,vz,power){
   if (ball.owner===p && (p.gk || dist(p,ball)>1.8*CONFIG.size.player)){ ball.x=p.x+Math.cos(p.a)*0.6; ball.z=p.z+Math.sin(p.a)*0.6; ball.y=p.gk?0.4:BR; }   // 드리블 중엔 공이 있는 자리에서 그대로 찬다
-  ball.owner=null; ball.vx=vx; ball.vy=vy; ball.vz=vz; ball.last=p.team;
+  ball.owner=null; ball.vx=vx; ball.vy=vy; ball.vz=vz; ball.last=p.team; ballTouch(p,p.gk&&ball.y>0.3?"hand":"foot");
   if (p.gk && S.ctrl===p) switchPlayer();
   p.cool=0.45; p.kickT=0.28; p.a=Math.atan2(vz,vx); p.hold=0;
   sfx.kick(power??0.5);
@@ -316,7 +317,7 @@ function userKick(p,type,power){
 
 /* ===== 소유 ===== */
 function setOwner(p){
-  ball.owner=p; ball.last=p.team; S.poss=p.team;
+  ball.owner=p; ball.last=p.team; S.poss=p.team; ballTouch(p,p.gk?"hand":"foot");
   if (S.side!==p.team){ S.side=p.team; S.press=0; } S.recv[0]=S.recv[1]=null;
   if (p.team===0) S.ctrl=p;                               // 내 골키퍼가 잡으면 골키퍼를 직접 조작
   if (p.gk) p.hold=p.team===0?CONFIG.gk.userHold:CONFIG.gk.hold;
@@ -358,6 +359,11 @@ function possession(dt){
 
 /* ===== 공 물리 / 규칙 ===== */
 function stepBall(dt){
+  ballPre(dt);
+  stepBallCore(dt);
+  ballPost(dt);
+}
+function stepBallCore(dt){
   const px=ball.x, pz=ball.z, o=ball.owner, c=CONFIG.ball;
   if (o && o.gk){                                           // 골키퍼는 손에 들고 있음
     const k=Math.min(1,dt*18);
@@ -387,7 +393,7 @@ function stepBall(dt){
     }
     ball.y=BR; ball.vy=0; ball.spin+=hyp(ball.vx,ball.vz)*dt*4;
   } else {
-    ball.vy-=c.g*dt; ball.x+=ball.vx*dt; ball.y+=ball.vy*dt; ball.z+=ball.vz*dt;
+    ball.vy-=c.g*dt; magnus(ball,dt); ball.x+=ball.vx*dt; ball.y+=ball.vy*dt; ball.z+=ball.vz*dt;
     const sp=hyp(ball.vx,ball.vz);
     if (ball.y<=BR){
       ball.y=BR; ball.vy = ball.vy<-1.5 ? -ball.vy*c.bounce : 0;
@@ -415,6 +421,66 @@ function stepBall(dt){
   } else if (Math.abs(ball.z)>HW+0.2)
     setPiece(1-ball.last, clamp(ball.x,-HL+1,HL-1), Math.sign(ball.z)*(HW-0.2), "스로인", false);
 }
+/* ===== 공 모듈 =====
+   나중에 헤딩·몸 트래핑을 붙이기 위한 준비. 지금 게임 동작은 바꾸지 않는다.
+   - ball.r          몸에 닿는 판정 반지름(m). 화면 크기와 따로 조절(CONFIG.ballBody.hitScale)
+   - ball.px/py/pz   지난 프레임 위치. 빠른 공이 몸을 통과하지 않게 "지난 위치 → 지금 위치" 선분으로 판정
+   - ball.state      "owned"(드리블·손) | "ground"(구름) | "air"(뜸) | "bounce"(막 튐)
+   - ball.touch      마지막으로 닿은 { p:선수, part:"foot"|"head"|"chest"|"thigh"|"hand"…, t:시각 }
+   - ball.w          회전(rad/s, 세계 좌표 벡터). CONFIG.ballBody.magnus 가 0보다 크면 공을 휘게 함
+   - BALL_HOOKS      매 프레임 공 물리 직후 불리는 함수 목록. 몸 충돌(헤딩·트래핑)은 여기에 추가하면 됨 */
+const BALL_HOOKS=[];
+function ballRadius(){ return BR*CONFIG.size.ball*1.15*CONFIG.ballBody.hitScale; }
+const ballLift=()=>BR*CONFIG.size.ball*1.15-BR;          // 화면의 공은 크게 그려서 땅에 닿게 이만큼 올려 그림 → 판정도 같은 중심을 씀
+function ballReset(){
+  ball.r=ballRadius(); ball.px=ball.x; ball.py=ball.y; ball.pz=ball.z; ball.state=ball.owner?"owned":"ground";
+  ball.w={x:0,y:0,z:0}; ball.touch=ball.touch||{ p:null, part:null, t:-1 };
+}
+function ballTouch(p,part){ ball.touch={ p, part, t:S.time }; }
+function ballPre(dt){ ball.px=ball.x; ball.py=ball.y; ball.pz=ball.z; ball.r=ballRadius(); }
+function ballPost(dt){
+  const wasAir=ball.state==="air";
+  ball.state = ball.owner ? "owned" : ball.y>BR+0.02 ? "air" : (wasAir||ball.state==="bounce") && ball.vy>0.2 ? "bounce" : "ground";
+  const k=Math.exp(-CONFIG.ballBody.spinDecay*dt); ball.w.x*=k; ball.w.y*=k; ball.w.z*=k;
+  for (const h of BALL_HOOKS) h(dt);
+}
+function magnus(b,dt){                                     // 회전하는 공이 옆으로 휘는 힘: a = k · (w × v)
+  const k=CONFIG.ballBody.magnus; if (!k || !b.w) return;
+  const w=b.w; b.vx+=k*(w.y*b.vz-w.z*b.vy)*dt; b.vy+=k*(w.z*b.vx-w.x*b.vz)*dt; b.vz+=k*(w.x*b.vy-w.y*b.vx)*dt;
+}
+// 비행 예측: 지금 공이 앞으로 어디를 지나가는지 dt 간격 표본으로 돌려준다(첫 착지까지). 헤딩·트래핑 동작 고르기에 사용
+function predictFlight(maxT=6,dt=1/60){
+  const c=CONFIG.ball, b={ x:ball.x, y:ball.y, z:ball.z, vx:ball.vx, vy:ball.vy, vz:ball.vz, w:ball.w }, path=[];
+  if (ball.owner) return { path, land:null, landT:null };
+  for (let t=dt;t<=maxT;t+=dt){
+    b.vy-=c.g*dt; magnus(b,dt); const k=Math.exp(-c.air*dt); b.vx*=k; b.vz*=k; b.x+=b.vx*dt; b.y+=b.vy*dt; b.z+=b.vz*dt;
+    if (b.y<=BR && b.vy<0){ path.push({ t, x:b.x, y:BR, z:b.z }); return { path, land:[b.x,b.z], landT:t }; }
+    path.push({ t, x:b.x, y:b.y, z:b.z });
+  }
+  return { path, land:null, landT:null };
+}
+// 선수 근처를 지날 때: 공이 선수에게 가장 가까워지는 순간의 시간·높이·거리
+function flightNear(p,flight=predictFlight()){
+  let best=null;
+  for (const s of flight.path){ const d=hyp(s.x-p.x,s.z-p.z); if (!best || d<best.d) best={ t:s.t, y:s.y, d, x:s.x, z:s.z }; }
+  return best;
+}
+// 선분(a→b)과 캡슐(c1–c2, 반지름 r) 사이 최단 거리
+function segSegDist(a,b,c,d){
+  const u=[b[0]-a[0],b[1]-a[1],b[2]-a[2]], v=[d[0]-c[0],d[1]-c[1],d[2]-c[2]], w=[a[0]-c[0],a[1]-c[1],a[2]-c[2]];
+  const dot=(p,q)=>p[0]*q[0]+p[1]*q[1]+p[2]*q[2], A=dot(u,u), B=dot(u,v), C=dot(v,v), D=dot(u,w), E=dot(v,w), den=A*C-B*B;
+  let sc=den>1e-9?clamp((B*E-C*D)/den,0,1):0, tc=C>1e-9?clamp((B*sc+E)/C,0,1):0;
+  sc=A>1e-9?clamp((B*tc-D)/A,0,1):0;
+  const dx=w[0]+sc*u[0]-tc*v[0], dy=w[1]+sc*u[1]-tc*v[1], dz=w[2]+sc*u[2]-tc*v[2]; return Math.sqrt(dx*dx+dy*dy+dz*dz);
+}
+// 이번 프레임에 공이 선수 몸의 어느 부위에 닿았는지(없으면 null). 부위 모양은 bodyParts(p) 참고
+function ballHits(p){
+  const parts=bodyParts(p); if (!parts) return null;
+  const L=ballLift(), a=[ball.px,ball.py+L,ball.pz], b=[ball.x,ball.y+L,ball.z]; let hit=null;
+  for (const pt of parts){ const d=segSegDist(a,b,pt.a,pt.b)-pt.r-ball.r; if (d<0 && (!hit || d<hit.depth)) hit={ part:pt.name, depth:d }; }
+  return hit;
+}
+
 function goal(team){
   S.score[team]++; S.dead=true; S.scorer=team; S.charge=null; ball.owner=null;
   say("골!", 2.4); sfx.goal(); syncHud();
@@ -424,7 +490,7 @@ function goal(team){
 function setPiece(team,x,z,label,byGk){
   S.dead=true; S.charge=null; S.press=0; say(label,1.1); sfx.whistle();
   S.pending={ t:0.9, fn:()=>{
-    Object.assign(ball,{ x, y:BR, z, vx:0, vy:0, vz:0, owner:null });
+    Object.assign(ball,{ x, y:BR, z, vx:0, vy:0, vz:0, owner:null }); ballReset();
     let taker=null, bd=1e9;
     for (const p of players) if (p.team===team && p.gk===byGk){ const d=hyp(p.x-x,p.z-z); if (d<bd){bd=d;taker=p;} }
     taker.x=x; taker.z=z; taker.vx=taker.vz=0; taker.a=Math.atan2(-z,-x*0.2); taker.stun=taker.cool=taker.slideT=0;
@@ -1001,10 +1067,22 @@ function buildPlayers3D(){
   });
 }
 const HAIRS=["#1a1512","#151515","#3a2717","#1a1512"];
+// 선수 몸 부위(히트박스): 관절 사이 캡슐. 화면에 그린 몸과 같은 배율(CONFIG.size.player)을 쓴다
+const PART_DEF=[ ["head",[7,8],[7,8],0.12], ["chest",[11,12],[23,24],0.16],
+  ["thighL",[23],[25],0.085], ["thighR",[24],[26],0.085], ["shinL",[25],[27],0.065], ["shinR",[26],[28],0.065],
+  ["footL",[29],[31],0.06], ["footR",[30],[32],0.06], ["armL",[11],[13],0.055], ["armR",[12],[14],0.055], ["handL",[13],[15],0.05], ["handR",[14],[16],0.05] ];
+function bodyParts(p){
+  const J=p.jw; if (!J) return null; const K=CONFIG.size.player;
+  const avg=ids=>{ let x=0,y=0,z=0; for (const i of ids){ x+=J[i].x; y+=J[i].y; z+=J[i].z; } return [x/ids.length,y/ids.length,z/ids.length]; };
+  return PART_DEF.map(([name,A,B,r])=>{ let a=avg(A), b=avg(B);
+    if (name==="head"){ a=[a[0],a[1]-0.04*K,a[2]]; b=[b[0],b[1]+0.08*K,b[2]]; }          // 머리: 귀 높이 아래위로 늘린 짧은 캡슐
+    return { name, a, b, r:r*K }; });
+}
 function poseToMesh(p,n){                                  // 포즈 관절 → 세계 좌표 → 뼈 행렬
   const K=CONFIG.size.player, fx=Math.cos(p.a), fz=Math.sin(p.a), sx=-fz, sz=fx;
   for (let i=0;i<33;i++){ const l=p.lm[i]; jw[i].set(p.x+(fx*l[0]+sx*l[2])*K, l[1]*K, p.z+(fz*l[0]+sz*l[2])*K); }
   computeFrames(jw,K,rig[n].mats);
+  if (!p.jw) p.jw=jw.map(v=>v.clone()); else for (let i=0;i<33;i++) p.jw[i].copy(jw[i]);   // 몸 판정용으로 선수마다 보관(지난 화면 기준)
 }
 
 /* ----- 공, 조작 표시 ----- */
@@ -1028,12 +1106,16 @@ const landMark=new THREE.Mesh(landGeo,new THREE.MeshBasicMaterial({ color:0xf5e0
 landMark.renderOrder=2; landMark.visible=false; scene.add(landMark);
 function landingPoint(){                                   // 공기 저항까지 넣어 공이 처음 땅에 닿는 곳을 미리 계산
   if (ball.owner || ball.y<CONFIG.landMark.minHeight && ball.vy<1) return null;
-  const c=CONFIG.ball, dt=1/60; let x=ball.x, y=ball.y, z=ball.z, vx=ball.vx, vy=ball.vy, vz=ball.vz;
-  for (let t=0;t<6;t+=dt){ vy-=c.g*dt; const k=Math.exp(-c.air*dt); vx*=k; vz*=k; x+=vx*dt; y+=vy*dt; z+=vz*dt; if (y<=BR && vy<0) return t>0.12?[x,z]:null; }
-  return null;
+  const f=predictFlight(); return f.land && f.landT>0.12 ? f.land : null;
 }
 const spinAxis=new THREE.Vector3(), spinQ=new THREE.Quaternion(); let lastSpin=0;
 
+function drawPartsOverlay(p){                             // 몸 판정 부위를 반투명 띠로 표시(관절 보기 켰을 때)
+  const parts=bodyParts(p); if (!parts) return; ctx.lineCap="round";
+  for (const pt of parts){ const A=proj(...pt.a), B=proj(...pt.b); if (!A||!B) continue;
+    ctx.strokeStyle=pt.name==="head"?"rgba(255,80,220,.35)":pt.name==="chest"?"rgba(255,200,40,.3)":"rgba(80,255,160,.3)";
+    ctx.lineWidth=Math.max(2,pt.r*2*(A.s+B.s)/2); ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke(); }
+}
 function drawPoseOverlay(p){                              // 관절 33개와 연결선 표시 (왼쪽 주황, 오른쪽 하늘색)
   const Q=jw.map(v=>proj(v.x,v.y,v.z));
   ctx.lineWidth=1.5; ctx.strokeStyle="rgba(255,255,255,.9)"; ctx.beginPath();
@@ -1075,7 +1157,8 @@ function render(){
   camera.position.set(cam.x,cc.h,cam.z); camera.rotation.set(-cc.pitch*Math.PI/180,-cam.yaw,0,"YXZ"); camera.updateMatrixWorld(); camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
   sun.target.position.set(cam.tx,0,cam.tz-6); sun.position.set(cam.tx-24,46,cam.tz-6+20);   // 카메라 쪽 왼편 위에서 비춰 선수 앞면이 밝게, 그림자는 오른쪽 뒤로
   ctx.clearRect(0,0,W,H);
-  players.forEach((p,n)=>{ updatePose(p); poseToMesh(p,n); if (showPose) drawPoseOverlay(p); });
+  players.forEach((p,n)=>{ updatePose(p); poseToMesh(p,n); if (showPose){ drawPoseOverlay(p); drawPartsOverlay(p); } });
+  if (showPose){ const b=proj(ball.x,ball.y+ballLift(),ball.z); if (b){ ctx.strokeStyle="#ff4fd8"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(b.x,b.y,Math.max(2,ball.r*b.s),0,7); ctx.stroke(); } }
   const br=BR*CONFIG.size.ball*1.15; ballMesh.scale.setScalar(br); ballMesh.position.set(ball.x,Math.max(br,ball.y+br-BR),ball.z);
   const sp=Math.hypot(ball.vx,ball.vz), dSpin=ball.spin-lastSpin; lastSpin=ball.spin;
   if (sp>0.2){ spinAxis.set(ball.vz/sp,0,-ball.vx/sp); ballMesh.quaternion.premultiply(spinQ.setFromAxisAngle(spinAxis,dSpin)); }
@@ -1141,7 +1224,7 @@ $("bMute").onclick=()=>{ muted=!muted; const b=$("bMute"); b.textContent=muted?"
 
 muted=true; resetState(); muted=false;                    // 타이틀 배경용 초기 배치(소리 없이)
 $("msg").hidden=true; setMode("title");
-window.GAME={ S, CONFIG, ball, HL, HW, get players(){ return players; }, update, press, release, render, proj, updatePose, poseProcedural, renderer, scene, camera, cam,
+window.GAME={ S, CONFIG, ball, HL, HW, BALL_HOOKS, predictFlight, flightNear, ballHits, bodyParts, get players(){ return players; }, update, press, release, render, proj, updatePose, poseProcedural, renderer, scene, camera, cam,
   LM, POSE_CONNECTIONS, POSE_CLIPS, loadPoseClip, fromMediaPipe, togglePose };   // 포즈 데이터 연결용
 requestAnimationFrame(t=>{ last=t; requestAnimationFrame(frame); });
 })();
