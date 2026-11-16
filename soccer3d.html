@@ -231,7 +231,9 @@ function inputVec(){
 const defending = () => S.side===1;      // 마지막으로 공을 잡은 팀 기준: 패스·루즈볼 중에는 버튼이 바뀌지 않음
 function press(type){
   if (S.mode!=="playing" || S.freeze>0 || S.dead) return;
-  S.charge={ type, t:0, own: ball.owner===S.ctrl };
+  // 공을 기다리는 중(예약) 같은 버튼을 다시 누르면 저장된 세기부터 이어서 충전, 다른 버튼이면 처음(0)부터
+  const cont=!!S.air && S.air.type===type && !ball.owner;
+  S.charge={ type, t: cont ? S.air.power*CONFIG.charge.time : 0, own: ball.owner===S.ctrl, cont };
 }
 // 공을 가졌으면 항상 킥. 공이 없을 때(뺏김·공중볼): 짧게 누르면 전환/태클/압박, 길게 누르면 패스/슛/크로스 충전
 function release(type){
@@ -242,7 +244,7 @@ function release(type){
   if (!ball.owner){                                        // 공이 누구 것도 아님: 닿으면 바로 차고, 아직 멀면(꾹 눌렀다 뗐을 때) 공이 올 때까지 기다렸다가 누른 세기로 찬다
     if (ballAirborne()){ const info=airReachable(c); if (info) return execAirKick(c,type,power,info); }
     else if (c.cool<=0 && dist(c,ball)<1.5) return userKick(c,type,power);
-    if (ch.t>CONFIG.charge.tap){ S.air={ type, power, until:S.time+CONFIG.airKick.hold }; return; }
+    if (ch.t>CONFIG.charge.tap || ch.cont){ S.air={ type, power, until:S.time+CONFIG.airKick.hold }; return; }
   }
   if (ball.owner===c || (!ball.owner && c.cool<=0 && dist(c,ball)<1.5 && ball.y<2.3)) return userKick(c,type,power);
   if (ch.own || ch.t>CONFIG.charge.tap) return;
@@ -783,7 +785,13 @@ function update(dt){
     if (S.half===1 && S.t>=CONFIG.matchSeconds/2){ S.half=2; S.dead=true; S.charge=null; say("하프타임",1.8); sfx.whistle(); S.pending={t:2,fn:()=>kickoff(1)}; }
     else if (S.t>=CONFIG.matchSeconds) return finish();
   }
-  if (S.charge) S.charge.t+=dt;
+  if (S.charge){
+    S.charge.t=Math.min(S.charge.t+dt,CONFIG.charge.time);
+    if (S.air){
+      if (S.charge.type===S.air.type){ S.air.power=clamp(S.charge.t/CONFIG.charge.time,CONFIG.charge.min,1); S.air.until=S.time+CONFIG.airKick.hold; }   // 이어서 누르는 중: 차는 세기도 바로 반영
+      else if (S.charge.t>CONFIG.charge.tap) S.air=null;     // 다른 버튼을 길게 누름: 예약을 바꿈
+    }
+  }
   if (S.press>0) S.press-=dt;
   stepPlayers(dt);
   stepBall(dt);
@@ -1187,9 +1195,17 @@ function drawOverlay(){
     if (h){
       ctx.fillStyle="#ffd84a"; ctx.strokeStyle="rgba(10,24,16,.5)"; ctx.lineWidth=1.5; ctx.lineJoin="round";
       ctx.beginPath(); ctx.moveTo(h.x-6,h.y-10); ctx.lineTo(h.x+6,h.y-10); ctx.lineTo(h.x,h.y); ctx.closePath(); ctx.stroke(); ctx.fill();
-      if (S.charge && (ball.owner===c || S.charge.t>CONFIG.charge.tap)){ const pw=clamp(S.charge.t/CONFIG.charge.time,0,1), bw=48;
-        ctx.lineCap="round"; ctx.lineWidth=8; ctx.strokeStyle="rgba(0,0,0,.55)"; ctx.beginPath(); ctx.moveTo(h.x-bw/2,h.y-20); ctx.lineTo(h.x+bw/2,h.y-20); ctx.stroke();
-        ctx.lineWidth=5; ctx.strokeStyle=pw<0.6?"#4ade80":pw<0.85?"#facc15":"#f87171"; ctx.beginPath(); ctx.moveTo(h.x-bw/2,h.y-20); ctx.lineTo(h.x-bw/2+bw*Math.max(0.02,pw),h.y-20); ctx.stroke(); }
+      // 강도 게이지: 누르는 중이면 실시간, 공을 기다리는 중(예약)이면 저장된 세기를 계속 보여 줌
+      let gv=null;
+      if (S.charge && (ball.owner===c || S.charge.t>CONFIG.charge.tap || S.charge.cont)) gv={ pw:clamp(S.charge.t/CONFIG.charge.time,0,1), type:S.charge.type, held:true };
+      else if (S.air) gv={ pw:S.air.power, type:S.air.type, held:false };
+      if (gv){ const pw=gv.pw, bw=48;
+        ctx.lineCap="round"; ctx.lineWidth=8; ctx.strokeStyle=gv.held?"rgba(0,0,0,.55)":"rgba(255,216,74,.9)"; ctx.beginPath(); ctx.moveTo(h.x-bw/2,h.y-20); ctx.lineTo(h.x+bw/2,h.y-20); ctx.stroke();
+        if (!gv.held){ ctx.lineWidth=5; ctx.strokeStyle="rgba(0,0,0,.6)"; ctx.beginPath(); ctx.moveTo(h.x-bw/2,h.y-20); ctx.lineTo(h.x+bw/2,h.y-20); ctx.stroke(); }
+        ctx.lineWidth=5; ctx.strokeStyle=pw<0.6?"#4ade80":pw<0.85?"#facc15":"#f87171"; ctx.beginPath(); ctx.moveTo(h.x-bw/2,h.y-20); ctx.lineTo(h.x-bw/2+bw*Math.max(0.02,pw),h.y-20); ctx.stroke();
+        if (!ball.owner || !gv.held){ ctx.font="bold 11px system-ui,sans-serif"; ctx.textAlign="center"; ctx.lineWidth=3; ctx.strokeStyle="rgba(0,0,0,.6)";
+          const lbl=`${{pass:"패스",shoot:"슛",cross:"크로스"}[gv.type]} ${Math.round(pw*100)}%`; ctx.strokeText(lbl,h.x,h.y-28); ctx.fillStyle="#fff"; ctx.fillText(lbl,h.x,h.y-28); }
+      }
     }
   }
   if (S.mode!=="playing") return;
