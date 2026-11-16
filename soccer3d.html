@@ -129,6 +129,7 @@ const CONFIG = {
             mark: 0.55, markRange: 12, runs: 7, shift: 1.2 },   // mark: 상대에게 붙는 정도, runs: 공격 때 침투 거리, shift: 공수 전환 때 대형이 바뀌는 빠르기
   receive: { assist: 0.6, react: 0.2 },   // 공 받기 도움: assist = 조이스틱을 쓰는 중에도 받는 위치 쪽으로 끌어 주는 정도(0 = 안 끌어 줌, 1 = 강하게), react = 출발까지 걸린다고 보는 시간(초)
   dribble: { radius: 0.34, min: 0.32, gap: 0.22, turnGap: 0.16, walk: 1.5, anim: 0.26 },   // 드리블: radius = 공이 머무는 원의 반지름(선수 키의 몇 배, 그림 기준 0.34), min = 발 앞 최소 거리(m), gap = 터치 사이 최소 간격(초), turnGap = 방향 틀 때 다시 터치하기까지 걸리는 최소 시간(초), walk = 이보다 느리면 공을 발 앞에 붙여 둠, anim = 터치할 때 발 내미는 동작 길이(초)
+  arrow:  { ahead: 1.25, size: 1.15, turn: 14 },   // 방향 화살표: ahead = 발 앞 거리(m), size = 크기, turn = 방향 바뀌는 빠르기
   autoSwitch: { every: 0.12, margin: 1.5 },   // 패스 중 자동 선수 전환: 검사 주기(초), 이만큼(m) 더 가까워야 전환
   player: { speed: 10.5, dribble: 0.9, accel: 7, cpuSpeed: 0.93, control: 1.35, controlHeight: 1.6 },   // control: 이 거리 안에 공이 오면 받는다, controlHeight: 이 높이 아래의 공만
   charge: { time: 0.9, min: 0.1, tap: 0.2, pressTime: 1.5 },   // 100%까지 걸리는 시간, 이보다 짧으면 '한 번 누름', 압박 지속 시간
@@ -1010,6 +1011,11 @@ const ballMesh=new THREE.Mesh(new THREE.SphereGeometry(1,20,14),new THREE.MeshSt
 ballMesh.castShadow=true; scene.add(ballMesh);
 const ring=new THREE.Mesh(new THREE.RingGeometry(0.62,0.74,40),new THREE.MeshBasicMaterial({ color:0xffd84a, transparent:true, opacity:0.95, depthWrite:false }));
 ring.rotation.x=-Math.PI/2; scene.add(ring);
+// 방향 화살표: 조작 선수 발 앞 땅 위의 V자 표시. 조이스틱을 밀면 그 방향, 놓으면 선수가 보는 방향을 가리킨다
+const arrowShape=new THREE.Shape([[0.34,0],[-0.18,0.52],[-0.36,0.40],[0.06,0],[-0.36,-0.40],[-0.18,-0.52]].map(([x,y])=>new THREE.Vector2(x,y)));
+const arrowGeo=new THREE.ShapeGeometry(arrowShape); arrowGeo.rotateX(-Math.PI/2);         // 바닥에 눕힘(뾰족한 끝이 +x)
+const arrow=new THREE.Mesh(arrowGeo,new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.85, depthWrite:false, side:THREE.DoubleSide }));
+arrow.renderOrder=2; scene.add(arrow); let arrowA=0;
 const spinAxis=new THREE.Vector3(), spinQ=new THREE.Quaternion(); let lastSpin=0;
 
 function drawPoseOverlay(p){                              // 관절 33개와 연결선 표시 (왼쪽 주황, 오른쪽 하늘색)
@@ -1057,7 +1063,13 @@ function render(){
   const br=BR*CONFIG.size.ball*1.15; ballMesh.scale.setScalar(br); ballMesh.position.set(ball.x,Math.max(br,ball.y+br-BR),ball.z);
   const sp=Math.hypot(ball.vx,ball.vz), dSpin=ball.spin-lastSpin; lastSpin=ball.spin;
   if (sp>0.2){ spinAxis.set(ball.vz/sp,0,-ball.vx/sp); ballMesh.quaternion.premultiply(spinQ.setFromAxisAngle(spinAxis,dSpin)); }
-  const c=S.ctrl; ring.visible=!!c&&S.mode!=="title"; if (c){ ring.position.set(c.x,0.03,c.z); ring.scale.setScalar(CONFIG.size.player); }
+  const c=S.ctrl; ring.visible=arrow.visible=!!c&&S.mode!=="title"; if (c){ ring.position.set(c.x,0.03,c.z); ring.scale.setScalar(CONFIG.size.player); }
+  if (c){
+    const iv=inputVec(), want=iv.m>0.15?Math.atan2(iv.z,iv.x):c.a, K=CONFIG.size.player, CA=CONFIG.arrow;
+    arrowA+=Math.atan2(Math.sin(want-arrowA),Math.cos(want-arrowA))*Math.min(1,CA.turn/60);  // 부드럽게 돌아감
+    arrow.position.set(c.x+Math.cos(arrowA)*CA.ahead*K, 0.035, c.z+Math.sin(arrowA)*CA.ahead*K);
+    arrow.rotation.y=-arrowA; arrow.scale.setScalar(CA.size*K);
+  }
   renderer.render(scene,camera);
   drawOverlay();
 }
