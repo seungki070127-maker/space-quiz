@@ -130,6 +130,7 @@ const CONFIG = {
   receive: { assist: 0.6, react: 0.2 },   // 공 받기 도움: assist = 조이스틱을 쓰는 중에도 받는 위치 쪽으로 끌어 주는 정도(0 = 안 끌어 줌, 1 = 강하게), react = 출발까지 걸린다고 보는 시간(초)
   dribble: { radius: 0.34, min: 0.32, gap: 0.22, turnGap: 0.16, walk: 1.5, anim: 0.26 },   // 드리블: radius = 공이 머무는 원의 반지름(선수 키의 몇 배, 그림 기준 0.34), min = 발 앞 최소 거리(m), gap = 터치 사이 최소 간격(초), turnGap = 방향 틀 때 다시 터치하기까지 걸리는 최소 시간(초), walk = 이보다 느리면 공을 발 앞에 붙여 둠, anim = 터치할 때 발 내미는 동작 길이(초)
   arrow:  { ahead: 1.25, size: 1.15, turn: 14 },   // 방향 화살표: ahead = 발 앞 거리(m), size = 크기, turn = 방향 바뀌는 빠르기
+  landMark: { size: 0.9, minHeight: 0.4 },   // 공 낙하 지점 X 표시: size = 크기, minHeight = 공이 이보다 높이 떠야 표시(m)
   autoSwitch: { every: 0.12, margin: 1.5 },   // 패스 중 자동 선수 전환: 검사 주기(초), 이만큼(m) 더 가까워야 전환
   player: { speed: 10.5, dribble: 0.9, accel: 7, cpuSpeed: 0.93, control: 1.35, controlHeight: 1.6 },   // control: 이 거리 안에 공이 오면 받는다, controlHeight: 이 높이 아래의 공만
   charge: { time: 0.9, min: 0.1, tap: 0.2, pressTime: 1.5 },   // 100%까지 걸리는 시간, 이보다 짧으면 '한 번 누름', 압박 지속 시간
@@ -1016,6 +1017,19 @@ const arrowShape=new THREE.Shape([[0.34,0],[-0.18,0.52],[-0.36,0.40],[0.06,0],[-
 const arrowGeo=new THREE.ShapeGeometry(arrowShape); arrowGeo.rotateX(-Math.PI/2);         // 바닥에 눕힘(뾰족한 끝이 +x)
 const arrow=new THREE.Mesh(arrowGeo,new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.85, depthWrite:false, side:THREE.DoubleSide }));
 arrow.renderOrder=2; scene.add(arrow); let arrowA=0;
+// 낙하 지점 X 표시: 공이 떠 있으면(크로스·높게 뜬 슛·튀는 공) 공이 처음 땅에 떨어질 자리에 노란 X 를 그린다
+const landGeo=new THREE.BufferGeometry(), landBar=(a)=>{ const c=Math.cos(a), s_=Math.sin(a), L=0.5, Wd=0.11;
+  return [[L,Wd],[-L,Wd],[-L,-Wd],[L,-Wd]].map(([x,z])=>[x*c-z*s_, 0, x*s_+z*c]); };
+{ const v=[], quad=q=>{ v.push(...q[0],...q[1],...q[2],...q[0],...q[2],...q[3]); }; quad(landBar(Math.PI/4)); quad(landBar(-Math.PI/4));
+  landGeo.setAttribute("position",new THREE.Float32BufferAttribute(v,3)); }
+const landMark=new THREE.Mesh(landGeo,new THREE.MeshBasicMaterial({ color:0xf5e03a, transparent:true, opacity:0.9, depthWrite:false, side:THREE.DoubleSide }));
+landMark.renderOrder=2; landMark.visible=false; scene.add(landMark);
+function landingPoint(){                                   // 공기 저항까지 넣어 공이 처음 땅에 닿는 곳을 미리 계산
+  if (ball.owner || ball.y<CONFIG.landMark.minHeight && ball.vy<1) return null;
+  const c=CONFIG.ball, dt=1/60; let x=ball.x, y=ball.y, z=ball.z, vx=ball.vx, vy=ball.vy, vz=ball.vz;
+  for (let t=0;t<6;t+=dt){ vy-=c.g*dt; const k=Math.exp(-c.air*dt); vx*=k; vz*=k; x+=vx*dt; y+=vy*dt; z+=vz*dt; if (y<=BR && vy<0) return t>0.12?[x,z]:null; }
+  return null;
+}
 const spinAxis=new THREE.Vector3(), spinQ=new THREE.Quaternion(); let lastSpin=0;
 
 function drawPoseOverlay(p){                              // 관절 33개와 연결선 표시 (왼쪽 주황, 오른쪽 하늘색)
@@ -1070,6 +1084,8 @@ function render(){
     arrow.position.set(c.x+Math.cos(arrowA)*CA.ahead*K, 0.035, c.z+Math.sin(arrowA)*CA.ahead*K);
     arrow.rotation.y=-arrowA; arrow.scale.setScalar(CA.size*K);
   }
+  const lp=S.mode!=="title" && !S.dead ? landingPoint() : null; landMark.visible=!!lp;
+  if (lp){ landMark.position.set(lp[0],0.04,lp[1]); landMark.scale.setScalar(CONFIG.landMark.size*CONFIG.size.player); }
   renderer.render(scene,camera);
   drawOverlay();
 }
