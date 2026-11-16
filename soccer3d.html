@@ -290,10 +290,10 @@ function userKick(p,type,power){
   if (type==="pass"){
     const c=CONFIG.pass, v=c.min+(c.max-c.min)*power;
     const m=pickMate(p,ax,az,c.wantMin+(c.wantMax-c.wantMin)*power,c.angle,3);
-    if (m) passTo(p,m,v); else doKick(p,ax*v,0,az*v,power);
+    doKick(p,ax*v,0,az*v,power); if (m) setRecv(p,m);      // 조준한 방향 그대로 찬다. 그 방향의 동료는 받으러 감
   } else if (type==="shoot" && p.gk){                      // 골키퍼의 슛 버튼 = 롱킥
     const [a,b]=CONFIG.gk.punt, d=a+(b-a)*power, m=pickMate(p,ax,az,d,25,20);
-    if (m) crossTo(p,m.x+m.vx,m.z+m.vz,m); else crossTo(p,p.x+ax*d,p.z+az*d,null);
+    crossTo(p,p.x+ax*d,p.z+az*d,m);                        // 조준한 방향으로, 세기만큼의 거리에 떨어지게
   } else if (type==="shoot"){
     const c=CONFIG.shot, gx=HL*p.dir, gd=hyp(gx-p.x,p.z)||1;
     if ((ax*(gx-p.x)+az*(-p.z))/gd < -0.2){               // 골대를 등지면 보는 방향으로 찬다
@@ -306,7 +306,7 @@ function userKick(p,type,power){
   } else {
     const c=CONFIG.cross, d=c.min+(c.max-c.min)*power;
     const m=pickMate(p,ax,az,d,c.assist,10);
-    if (m) crossTo(p,m.x+m.vx,m.z+m.vz,m); else crossTo(p,p.x+ax*d,p.z+az*d,null);
+    crossTo(p,p.x+ax*d,p.z+az*d,m);                        // 조준한 방향으로, 세기만큼의 거리에 떨어지게(그 방향의 동료는 받으러 감)
   }
 }
 
