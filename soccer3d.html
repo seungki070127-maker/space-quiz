@@ -131,6 +131,7 @@ const CONFIG = {
   dribble: { radius: 0.34, min: 0.32, gap: 0.22, turnGap: 0.16, walk: 1.5, anim: 0.26 },   // 드리블: radius = 공이 머무는 원의 반지름(선수 키의 몇 배, 그림 기준 0.34), min = 발 앞 최소 거리(m), gap = 터치 사이 최소 간격(초), turnGap = 방향 틀 때 다시 터치하기까지 걸리는 최소 시간(초), walk = 이보다 느리면 공을 발 앞에 붙여 둠, anim = 터치할 때 발 내미는 동작 길이(초)
   arrow:  { ahead: 1.25, size: 1.15, turn: 14 },   // 방향 화살표: ahead = 발 앞 거리(m), size = 크기, turn = 방향 바뀌는 빠르기
   landMark: { size: 0.9, minHeight: 0.4 },   // 공 낙하 지점 X 표시: size = 크기, minHeight = 공이 이보다 높이 떠야 표시(m)
+  pitchLook: { stripe: 10 },   // 잔디 줄무늬 폭(비율미터, 경기장 가로 = 100)
   autoSwitch: { every: 0.12, margin: 1.5 },   // 패스 중 자동 선수 전환: 검사 주기(초), 이만큼(m) 더 가까워야 전환
   player: { speed: 10.5, dribble: 0.9, accel: 7, cpuSpeed: 0.93, control: 1.35, controlHeight: 1.6 },   // control: 이 거리 안에 공이 오면 받는다, controlHeight: 이 높이 아래의 공만
   charge: { time: 0.9, min: 0.1, tap: 0.2, pressTime: 1.5 },   // 100%까지 걸리는 시간, 이보다 짧으면 '한 번 누름', 압박 지속 시간
@@ -145,7 +146,8 @@ const CONFIG = {
 };
 const HL = CONFIG.player.speed*CONFIG.size.lengthSec/2, HW = CONFIG.player.speed*CONFIG.size.widthSec/2,   // 경기장 반길이·반폭(m)
       SX = HL/52.5, SZ = HW/34,                                                // 실제 경기장(105×68m) 대비 배율 (대형 위치에 사용)
-      PBX = 16.5, PBZ = 20.16, GBX = 5.5, GBZ = 9.16, CR = 9.15,               // 박스·서클은 실제 규격 그대로(선수 크기 대비 사진과 같은 비율)
+      MS = 2*HL/100,                                                           // 경기장 가로를 '100m'로 보는 비율 단위: 1 비율미터 = MS m (지금 1.785m)
+      PBX = 16.5*MS, PBZ = 20.16*MS, GBX = 5.5*MS, GBZ = 9.16*MS, CR = 9.15*MS, PSPOT = 11*MS,   // 박스·서클·페널티 지점: 실제 규격을 비율미터로
         // 경기장 반길이·반폭, 페널티박스, 골에어리어, 센터서클
        GW = CONFIG.size.goalHalfWidth, GH = CONFIG.size.goalHeight, BR = 0.11;
 // 4-4-2 대형 (자기 진영 기준 [앞뒤, 좌우, 역할]). 숫자를 바꾸면 기본 위치가 바뀝니다.
@@ -735,25 +737,25 @@ function buildWorld(){
   const flat=(w,d,mat,y)=>{ const m=new THREE.Mesh(new THREE.PlaneGeometry(w,d),mat); m.rotation.x=-Math.PI/2; m.position.y=y; scene.add(m); return m; };
   flat(2*HL+90,2*HW+85,new THREE.MeshLambertMaterial({ color:LOOK.track }),-0.04);
   // 잔디: 세로 줄무늬 + 잔디결 느낌의 잡티
-  const GRW=2*HL+16, GRH=2*HW+15, COLS=Math.round(2*HL/6.6/2)*2, ROWS=Math.round(2*HW/6.8/2)*2;   // 체크무늬 칸: 약 6.6×6.8m
-  const grass=canvasTex(1024,704,(g,w,h)=>{
-    g.fillStyle=LOOK.apron; g.fillRect(0,0,w,h);
-    const px=w/GRW, x0=8*px, sw=2*HL/COLS*px;           // 경기장 + 바깥 여유(가로 8m, 세로 7.5m)를 그림
-    const sh=2*HW/ROWS*h/GRH, y0=7.5*h/GRH;
-    for (let i=0;i<COLS;i++) for (let j=0;j<ROWS;j++){ g.fillStyle=(i+j)%2?LOOK.grassA:LOOK.grassB; g.fillRect(x0+i*sw,y0+j*sh,sw+1,sh+1); }
+  const GRW=2*HL+16, GRH=2*HW+15, SW=CONFIG.pitchLook.stripe*MS;   // 잔디 줄무늬: 골라인과 나란한 띠, 폭 10 비율미터(= 경기장 가로의 1/10)
+  const grass=canvasTex(2048,512,(g,w,h)=>{
+    const px=w/GRW, x0=8*px;                              // 경기장 + 바깥 여유(가로 8m, 세로 7.5m)를 그림. 줄무늬는 바깥 여유까지 이어짐
+    for (let i=-1;i*SW<2*HL+8;i++){ g.fillStyle=((i%2)+2)%2?LOOK.grassA:LOOK.grassB; g.fillRect(x0+i*SW*px,0,SW*px+1,h); }
+    const sheen=g.createLinearGradient(0,0,0,h); sheen.addColorStop(0,"rgba(255,255,220,.05)"); sheen.addColorStop(0.5,"rgba(0,0,0,0)"); sheen.addColorStop(1,"rgba(0,20,0,.05)");
+    g.fillStyle=sheen; g.fillRect(0,0,w,h);
     for (let i=0;i<26000;i++){ g.fillStyle=Math.random()<0.5?"rgba(0,30,0,.06)":"rgba(210,255,170,.05)"; g.fillRect(Math.random()*w,Math.random()*h,2+Math.random()*3,1.5); }
   });
   flat(GRW,GRH,new THREE.MeshLambertMaterial({ map:grass }),0).receiveShadow=true;
   // 라인: 텍스처가 아니라 얇은 판으로 깔아서 확대해도 또렷하게
-  const lineMat=new THREE.MeshBasicMaterial({ color:0xf4f7f2, polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2 }), T=0.13;
+  const lineMat=new THREE.MeshBasicMaterial({ color:0xf4f7f2, polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2 }), T=0.12*MS;            // 선 굵기 12cm(비율미터)
   const seg=(x1,z1,x2,z2)=>{ const m=flat(Math.abs(x2-x1)+T,Math.abs(z2-z1)+T,lineMat,0.012); m.position.x=(x1+x2)/2; m.position.z=(z1+z2)/2; };
   const arc=(cx,cz,r,a0,a1)=>{ const m=new THREE.Mesh(new THREE.RingGeometry(r-T/2,r+T/2,64,1,a0,a1-a0),lineMat); m.rotation.x=-Math.PI/2; m.position.set(cx,0.012,cz); scene.add(m); };
   seg(-HL,-HW,HL,-HW); seg(-HL,HW,HL,HW); seg(-HL,-HW,-HL,HW); seg(HL,-HW,HL,HW); seg(0,-HW,0,HW);
-  arc(0,0,CR,0,Math.PI*2); arc(0,0,0.12,0,Math.PI*2);
+  arc(0,0,CR,0,Math.PI*2); arc(0,0,0.12*MS,0,Math.PI*2);
   for (const s of [-1,1]){
     seg(s*HL,-PBZ,s*(HL-PBX),-PBZ); seg(s*HL,PBZ,s*(HL-PBX),PBZ); seg(s*(HL-PBX),-PBZ,s*(HL-PBX),PBZ);
     seg(s*HL,-GBZ,s*(HL-GBX),-GBZ); seg(s*HL,GBZ,s*(HL-GBX),GBZ); seg(s*(HL-GBX),-GBZ,s*(HL-GBX),GBZ);
-    const c=s>0?Math.PI:0; arc(s*(HL-11),0,CR,c-0.926,c+0.926); arc(s*(HL-11),0,0.12,0,Math.PI*2);
+    const c=s>0?Math.PI:0, ah=Math.acos((PBX-PSPOT)/CR); arc(s*(HL-PSPOT),0,CR,c-ah,c+ah); arc(s*(HL-PSPOT),0,0.12*MS,0,Math.PI*2);
     // 골대와 그물
     const post=new THREE.MeshStandardMaterial({ color:0xffffff, roughness:0.4 });
     const bar=(ax,ay,az,bx,by,bz)=>{ const a=new THREE.Vector3(ax,ay,az), b=new THREE.Vector3(bx,by,bz), m=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,a.distanceTo(b),10),post);
