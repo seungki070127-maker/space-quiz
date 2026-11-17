@@ -52,6 +52,24 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
 .lbtn:focus-visible{outline:3px solid #ffd84a;outline-offset:2px}
 .lnote{min-height:1.3em;margin:2px 0 0;text-align:center;color:#fff;font-size:13px;text-shadow:0 1px 4px rgba(0,0,0,.6)}
 .who{font-size:13px;color:var(--muted);margin:0 0 8px}
+#ovCountry{background:#05070c;overflow:hidden;padding:max(14px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+#ovCountry::before{content:"";position:absolute;inset:-30px;background:var(--img) center/cover no-repeat;filter:blur(16px) brightness(.4)}
+.steps{position:relative;width:100%;max-width:900px;color:#fff;text-align:center}
+.stepbar{display:flex;align-items:center;gap:12px;justify-content:center;position:relative;margin-bottom:6px}
+.back{position:absolute;left:0;width:40px;height:40px;border-radius:50%;border:1.5px solid rgba(255,255,255,.6);background:rgba(0,0,0,.35);color:#fff;font-size:26px;line-height:1;cursor:pointer}
+.stepno{font-size:14px;font-weight:700;opacity:.9}
+.dots{display:flex;gap:6px;margin:0;padding:0;list-style:none}
+.dots li{width:22px;height:5px;border-radius:3px;background:rgba(255,255,255,.3)}.dots li.on{background:#ffd84a}
+.steps h2{margin:4px 0 clamp(12px,4vh,28px);font-size:clamp(22px,4.4vw,34px);font-weight:900;text-shadow:0 2px 12px rgba(0,0,0,.5)}
+.cgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:clamp(8px,1.6vw,16px)}
+.ccard{display:flex;flex-direction:column;align-items:center;gap:10px;padding:clamp(10px,2.4vh,20px) 8px;border-radius:14px;cursor:pointer;
+  background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.35);color:#fff;font:inherit;font-weight:800;font-size:clamp(14px,2vw,18px);
+  -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);transition:transform .1s,background .1s,border-color .1s}
+.ccard svg{width:100%;max-width:120px;aspect-ratio:3/2;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.ccard:hover,.ccard:focus-visible{background:rgba(255,255,255,.2);border-color:#ffd84a}
+.ccard:active{transform:scale(.96)}
+.ccard:focus-visible,.back:focus-visible{outline:3px solid #ffd84a;outline-offset:2px}
+@media (max-aspect-ratio:1/1){.cgrid{grid-template-columns:repeat(3,1fr)}}
 [hidden]{display:none!important}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 @keyframes pop{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:none}}
@@ -113,6 +131,15 @@ addEventListener("load",()=>{
     <button class="lbtn guest" id="bGuest">게스트로 계속하기<span id="guestInfo" hidden></span></button>
     <p class="lnote" id="loginNote" aria-live="polite"></p>
   </div>
+</div>
+<div class="overlay" id="ovCountry" hidden>
+  <section class="steps" aria-labelledby="cTitle">
+    <div class="stepbar"><button class="back" id="cBack" aria-label="로그인 화면으로">‹</button>
+      <span class="stepno">팀 선택 · 1 / 4 단계</span>
+      <ol class="dots" aria-hidden="true"><li class="on"></li><li></li><li></li><li></li></ol></div>
+    <h2 id="cTitle">코치할 국가 선택</h2>
+    <div class="cgrid" id="cGrid"></div>
+  </section>
 </div>
 <div class="overlay" id="ovTitle">
   <section class="panel">
@@ -220,6 +247,7 @@ const dist = (a,b) => hyp(a.x-b.x, a.z-b.z);
 
 /* ===== 상태 ===== */
 const S = { mode:"title" };
+const MENU=new Set(["login","country","title"]);         // 경기 전 메뉴 화면들
 const ball = {};
 let players = [];
 function resetState(){
@@ -572,7 +600,14 @@ function finish(){
    저장소: 이 기기의 localStorage 한 칸(SAVE_KEY). 앱(브라우저 데이터)을 지우지 않는 한 유지.
    막혀 있으면(사생활 모드 등) 메모리에만 두고 게임은 그대로 동작. */
 const SAVE_KEY="fc27:v1";
-const DEFAULT_SAVE={ v:1, account:null, guest:null };      // account: {type:"guest"} | {type:"google", sub, name}
+const COUNTRIES=[                                   // 국기는 SVG로 직접 그림(외부 파일 없음)
+  { id:"eng", name:"잉글랜드", flag:'<rect width="30" height="20" fill="#fff"/><rect x="12.5" width="5" height="20" fill="#ce1124"/><rect y="7.5" width="30" height="5" fill="#ce1124"/>' },
+  { id:"esp", name:"스페인",   flag:'<rect width="30" height="20" fill="#aa151b"/><rect y="5" width="30" height="10" fill="#f1bf00"/>' },
+  { id:"ita", name:"이탈리아", flag:'<rect width="10" height="20" fill="#009246"/><rect x="10" width="10" height="20" fill="#fff"/><rect x="20" width="10" height="20" fill="#ce2b37"/>' },
+  { id:"ger", name:"독일",     flag:'<rect width="30" height="6.67" fill="#000"/><rect y="6.67" width="30" height="6.67" fill="#dd0000"/><rect y="13.33" width="30" height="6.67" fill="#ffce00"/>' },
+  { id:"fra", name:"프랑스",   flag:'<rect width="10" height="20" fill="#002395"/><rect x="10" width="10" height="20" fill="#fff"/><rect x="20" width="10" height="20" fill="#ed2939"/>' },
+];
+const DEFAULT_SAVE={ v:1, account:null, guest:null, country:null };      // account: {type:"guest"} | {type:"google", sub, name}
 const newStats=()=>({ played:0, win:0, draw:0, loss:0, gf:0, ga:0 });
 function cleanStats(t){ const o=newStats(); if (t && typeof t==="object") for (const k in o){ const n=Number(t[k]); if (Number.isFinite(n) && n>=0) o[k]=Math.floor(n); } return o; }
 function loadSave(){
@@ -581,6 +616,7 @@ function loadSave(){
     const sv={ ...DEFAULT_SAVE, ...(d && typeof d==="object" ? d : {}) };
     if (sv.guest){ const g=sv.guest; sv.guest=(typeof g.id==="string" && /^\d{4}$/.test(String(g.tag))) ? { id:g.id, tag:String(g.tag), created:Number(g.created)||Date.now(), stats:cleanStats(g.stats) } : null; }
     if (!sv.account || !["guest","google"].includes(sv.account.type)) sv.account=null;
+    if (!COUNTRIES.some(c=>c.id===sv.country)) sv.country=null;
     return sv;
   }catch{ return { ...DEFAULT_SAVE }; }
 }
@@ -607,7 +643,8 @@ function showLogin(){
 }
 function showWho(){
   const a=SAVE.account, t=profileStats();
-  $("who").textContent = !a ? "" : (a.type==="google" ? `${a.name||"Google 계정"}` : `게스트 ${SAVE.guest.tag}`) + (t ? ` · ${statLine(t)}` : "");
+  const ct=COUNTRIES.find(c=>c.id===SAVE.country);
+  $("who").textContent = (ct ? `${ct.name} 코치 · ` : "") + (!a ? "" : (a.type==="google" ? `${a.name||"Google 계정"}` : `게스트 ${SAVE.guest.tag}`) + (t ? ` · ${statLine(t)}` : ""));
 }
 /* Google 로그인 연결 자리.
    나중에 연동할 때: 1) AUTH.googleClientId 에 Google Cloud OAuth 클라이언트 ID를 넣고
@@ -626,10 +663,12 @@ async function loginGoogle(){
     if (!u || !u.sub){ note.textContent="Google 로그인이 취소됐어요."; return; }
     const prev=SAVE.account?.type==="google" && SAVE.account.sub===u.sub ? SAVE.account.stats : null;
     SAVE.account={ type:"google", sub:String(u.sub), name:String(u.name||""), stats:cleanStats(prev || SAVE.guest?.stats) };
-    writeSave(); setMode("title");
+    writeSave(); setMode("country");
   }catch{ note.textContent="Google 로그인에 실패했어요. 잠시 후 다시 시도해 주세요."; }
 }
-function loginGuest(){ ensureGuest(); SAVE.account={ type:"guest" }; writeSave(); setMode("title"); }
+/* ===== 팀 선택 1/4: 코치할 국가 ===== */
+function pickCountry(id){ SAVE.country=id; writeSave(); setMode("title"); }   // 2~4단계가 생기면 여기서 다음 단계로
+function loginGuest(){ ensureGuest(); SAVE.account={ type:"guest" }; writeSave(); setMode("country"); }
 
 /* ===== 선수 AI / 이동 ===== */
 // 공을 가장 빨리 만날 수 있는 지점: 굴러가는 공이 마찰로 느려지는 것까지 계산해서, 선수가 제때 닿을 수 있는 첫 지점을 고른다
@@ -927,12 +966,12 @@ function syncHud(){
 function say(text,dur){ const m=$("msg"); m.textContent=text; m.hidden=false; S.msgT=dur; }
 function setMode(m){
   S.mode=m;
-  $("ovLogin").hidden=m!=="login"; $("ovTitle").hidden=m!=="title"; $("ovPause").hidden=m!=="paused"; $("ovFull").hidden=m!=="full";
+  $("ovLogin").hidden=m!=="login"; $("ovCountry").hidden=m!=="country"; $("ovTitle").hidden=m!=="title"; $("ovPause").hidden=m!=="paused"; $("ovFull").hidden=m!=="full";
   const inGame=m==="playing"||m==="paused";
-  $("hud").hidden=m==="title"||m==="login"; $("corner").hidden=!inGame; $("pad").hidden=m!=="playing";
+  $("hud").hidden=MENU.has(m); $("corner").hidden=!inGame; $("pad").hidden=m!=="playing";
   if (m!=="playing"){ $("msg").hidden=true; keys.clear(); stick.id=null; stick.x=stick.z=0; S.charge=null; S.press=0; }
   if (m==="login") showLogin(); if (m==="title") showWho();
-  ({login:$("bGuest"),title:$("bStart"),paused:$("bResume"),full:$("bRestart2")})[m]?.focus();
+  ({login:$("bGuest"),country:document.querySelector(".ccard"),title:$("bStart"),paused:$("bResume"),full:$("bRestart2")})[m]?.focus(m==="country"?{focusVisible:false}:undefined);
 }
 function start(){ resetState(); setMode("playing"); }
 
@@ -1307,7 +1346,7 @@ function drawPoseOverlay(p){                              // 관절 33개와 연
 function drawOverlay(){
   ctx.fillStyle=vignette; ctx.fillRect(0,0,W,H);
   const c=S.ctrl;
-  if (c && S.mode!=="title" && S.mode!=="login"){                             // 조작 선수 표시와 강도 게이지
+  if (c && !MENU.has(S.mode)){                             // 조작 선수 표시와 강도 게이지
     const h=proj(c.x,2.1*CONFIG.size.player,c.z);
     if (h){
       ctx.fillStyle="#ffd84a"; ctx.strokeStyle="rgba(10,24,16,.5)"; ctx.lineWidth=1.5; ctx.lineJoin="round";
@@ -1350,14 +1389,14 @@ function render(){
   const br=BR*CONFIG.size.ball*1.15; ballMesh.scale.setScalar(br); ballMesh.position.set(ball.x,Math.max(br,ball.y+br-BR),ball.z);
   const sp=Math.hypot(ball.vx,ball.vz), dSpin=ball.spin-lastSpin; lastSpin=ball.spin;
   if (sp>0.2){ spinAxis.set(ball.vz/sp,0,-ball.vx/sp); ballMesh.quaternion.premultiply(spinQ.setFromAxisAngle(spinAxis,dSpin)); }
-  const c=S.ctrl; ring.visible=arrow.visible=!!c&&S.mode!=="title"&&S.mode!=="login"; if (c){ ring.position.set(c.x,0.03,c.z); ring.scale.setScalar(CONFIG.size.player); }
+  const c=S.ctrl; ring.visible=arrow.visible=!!c&&!MENU.has(S.mode); if (c){ ring.position.set(c.x,0.03,c.z); ring.scale.setScalar(CONFIG.size.player); }
   if (c){
     const iv=inputVec(), want=iv.m>0.15?Math.atan2(iv.z,iv.x):c.a, K=CONFIG.size.player, CA=CONFIG.arrow;
     arrowA+=Math.atan2(Math.sin(want-arrowA),Math.cos(want-arrowA))*Math.min(1,CA.turn/60);  // 부드럽게 돌아감
     arrow.position.set(c.x+Math.cos(arrowA)*CA.ahead*K, 0.035, c.z+Math.sin(arrowA)*CA.ahead*K);
     arrow.rotation.y=-arrowA; arrow.scale.setScalar(CA.size*K); arrow.material.color.set(S.air?0xffd84a:0xffffff);   // 공중볼을 기다리는 중이면 노랑
   }
-  const lp=S.mode!=="title" && S.mode!=="login" && !S.dead ? landingPoint() : null; landMark.visible=!!lp;
+  const lp=!MENU.has(S.mode) && !S.dead ? landingPoint() : null; landMark.visible=!!lp;
   if (lp){ landMark.position.set(lp[0],0.04,lp[1]); landMark.scale.setScalar(CONFIG.landMark.size*CONFIG.size.player); }
   renderer.render(scene,camera);
   drawOverlay();
@@ -1403,6 +1442,13 @@ for (const b of document.querySelectorAll(".act")){
     press(type); if (S.charge && S.charge.own) S.charge.t=CONFIG.charge.time*0.45; release(type); });
   b.addEventListener("contextmenu",e=>e.preventDefault());
 }
+{ const g=$("cGrid");                       // 국가 칸 만들기(이름은 textContent로)
+  for (const c of COUNTRIES){
+    const b=document.createElement("button"); b.className="ccard"; b.type="button"; b.dataset.id=c.id;
+    b.innerHTML=`<svg viewBox="0 0 30 20" aria-hidden="true">${c.flag}</svg><span></span>`;   // 고정된 국기 데이터만
+    b.querySelector("span").textContent=c.name; b.onclick=()=>pickCountry(c.id); g.appendChild(b);
+  } }
+$("cBack").onclick=()=>setMode("login");
 $("bGoogle").onclick=loginGoogle; $("bGuest").onclick=loginGuest;
 $("bLogout").onclick=()=>setMode("login");
 $("bStart").onclick=start; $("bRestart1").onclick=start; $("bRestart2").onclick=start;
