@@ -52,24 +52,46 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
 .lbtn:focus-visible{outline:3px solid #ffd84a;outline-offset:2px}
 .lnote{min-height:1.3em;margin:2px 0 0;text-align:center;color:#fff;font-size:13px;text-shadow:0 1px 4px rgba(0,0,0,.6)}
 .who{font-size:13px;color:var(--muted);margin:0 0 8px}
-#ovCountry{background:#05070c;overflow:hidden;padding:max(14px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
-#ovCountry::before{content:"";position:absolute;inset:-30px;background:var(--img) center/cover no-repeat;filter:blur(16px) brightness(.4)}
-.steps{position:relative;width:100%;max-width:900px;color:#fff;text-align:center}
-.stepbar{display:flex;align-items:center;gap:12px;justify-content:center;position:relative;margin-bottom:6px}
-.back{position:absolute;left:0;width:40px;height:40px;border-radius:50%;border:1.5px solid rgba(255,255,255,.6);background:rgba(0,0,0,.35);color:#fff;font-size:26px;line-height:1;cursor:pointer}
-.stepno{font-size:14px;font-weight:700;opacity:.9}
-.dots{display:flex;gap:6px;margin:0;padding:0;list-style:none}
-.dots li{width:22px;height:5px;border-radius:3px;background:rgba(255,255,255,.3)}.dots li.on{background:#ffd84a}
-.steps h2{margin:4px 0 clamp(12px,4vh,28px);font-size:clamp(22px,4.4vw,34px);font-weight:900;text-shadow:0 2px 12px rgba(0,0,0,.5)}
-.cgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:clamp(8px,1.6vw,16px)}
-.ccard{display:flex;flex-direction:column;align-items:center;gap:10px;padding:clamp(10px,2.4vh,20px) 8px;border-radius:14px;cursor:pointer;
-  background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.35);color:#fff;font:inherit;font-weight:800;font-size:clamp(14px,2vw,18px);
-  -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);transition:transform .1s,background .1s,border-color .1s}
-.ccard svg{width:100%;max-width:120px;aspect-ratio:3/2;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.4)}
-.ccard:hover,.ccard:focus-visible{background:rgba(255,255,255,.2);border-color:#ffd84a}
-.ccard:active{transform:scale(.96)}
-.ccard:focus-visible,.back:focus-visible{outline:3px solid #ffd84a;outline-offset:2px}
-@media (max-aspect-ratio:1/1){.cgrid{grid-template-columns:repeat(3,1fr)}}
+/* 국가 선택: 밝은 유리 카드 스타일(연한 하늘색 배경, 흰 반투명 카드, 부드러운 그림자, 파란 포인트) */
+#ovCountry{--ink:#1b2b4b;--sub:#6b7a99;--blue:#3b82f6;--blue2:#2563eb;--card:rgba(255,255,255,.72);--line:rgba(255,255,255,.95);
+  --shadow:0 8px 24px rgba(60,90,160,.12),0 1px 2px rgba(60,90,160,.08);
+  display:block;padding:0;background:radial-gradient(1200px 600px at 85% -10%,#dbe8ff 0,transparent 60%),radial-gradient(900px 500px at 0 110%,#e4ecff 0,transparent 60%),#eef3fb;
+  color:var(--ink);overflow:hidden}
+.cs{position:absolute;inset:0;display:grid;grid-template-rows:auto auto 1fr auto;gap:clamp(8px,2vh,16px);
+  padding:max(12px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left))}
+.cs-head{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.cs-head h2{margin:0;font-size:clamp(17px,2.6vw,24px);font-weight:800;line-height:1.2}
+.cs-head h2 small{display:block;font-size:.62em;font-weight:600;color:var(--sub);letter-spacing:.02em}
+.cs-prog{display:flex;align-items:center;gap:12px;font-weight:700;font-size:clamp(13px,1.8vw,16px);color:var(--ink)}
+.cs-bar{width:clamp(110px,24vw,280px);height:10px;border-radius:99px;background:rgba(59,130,246,.12);box-shadow:inset 0 1px 2px rgba(60,90,160,.15);overflow:hidden}
+.cs-bar i{display:block;height:100%;width:25%;border-radius:99px;background:linear-gradient(90deg,#60a5fa,var(--blue2))}
+.cs-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(6px,1.2vw,12px);max-width:820px;width:100%;margin:0 auto;padding:4px;border-radius:16px;
+  background:rgba(255,255,255,.5);border:1px solid var(--line);box-shadow:var(--shadow)}
+.cs-tabs span{padding:clamp(6px,1.4vh,10px) 6px;border-radius:12px;text-align:center;font-weight:700;font-size:clamp(13px,1.8vw,15px);color:var(--sub)}
+.cs-tabs span.done{color:var(--ink);background:rgba(255,255,255,.8)}
+.cs-tabs span.on{color:#fff;background:linear-gradient(135deg,#60a5fa,var(--blue2));box-shadow:0 6px 16px rgba(37,99,235,.35)}
+.cs-tabs span.off{opacity:.55}
+.cgrid{display:grid;grid-template-columns:repeat(6,1fr);grid-auto-rows:minmax(0,clamp(96px,30vh,150px));gap:clamp(8px,1.4vw,14px);align-content:safe center;overflow:auto;padding:2px 2px 6px}
+.ccard{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(6px,1.4vh,12px);padding:10px 6px;border-radius:16px;cursor:pointer;
+  background:var(--card);border:1.5px solid var(--line);box-shadow:var(--shadow);color:var(--ink);font:inherit;font-weight:700;font-size:clamp(13px,1.8vw,16px);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);transition:transform .12s,box-shadow .12s,border-color .12s,background .12s;position:relative}
+.ccard svg{width:62%;max-width:96px;aspect-ratio:3/2;border-radius:6px;box-shadow:0 3px 10px rgba(30,50,90,.18),0 0 0 1px rgba(30,50,90,.08)}
+.ccard.prev{color:var(--blue2);background:rgba(255,255,255,.5)}
+.ccard.prev b{font-size:clamp(24px,4vw,34px);line-height:1}
+.ccard:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(60,90,160,.18)}
+.ccard[aria-pressed="true"]{border-color:var(--blue);background:linear-gradient(180deg,#f3f8ff,#e3eeff);box-shadow:0 0 0 3px rgba(59,130,246,.25),0 12px 28px rgba(37,99,235,.2)}
+.ccard[aria-pressed="true"]::after{content:"✓";position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:50%;background:var(--blue2);color:#fff;font-size:13px;line-height:22px}
+.cs-foot{display:grid;grid-template-columns:1fr 1fr 1fr;gap:clamp(8px,1.4vw,14px);align-items:center}
+.cs-foot .sp{grid-column:1}
+.sbtn{font:inherit;font-weight:700;font-size:clamp(14px,1.9vw,16px);min-height:44px;padding:8px 14px;border-radius:14px;cursor:pointer;
+  color:var(--ink);background:rgba(255,255,255,.75);border:1px solid var(--line);box-shadow:var(--shadow)}
+.sbtn.pri{color:#fff;border:0;background:linear-gradient(135deg,#60a5fa,var(--blue2));box-shadow:0 8px 20px rgba(37,99,235,.35)}
+.sbtn.pri:disabled{cursor:default;background:#c9d6ec;color:#f4f7fd;box-shadow:none}
+.ccard:focus-visible,.sbtn:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
+.cs-toast{position:absolute;left:50%;bottom:calc(max(12px,env(safe-area-inset-bottom)) + 56px);transform:translateX(-50%);padding:8px 14px;border-radius:12px;
+  background:rgba(27,43,75,.9);color:#fff;font-size:13px;font-weight:600;pointer-events:none}
+.cs-toast:empty{display:none}
+@media (max-aspect-ratio:1/1){.cgrid{grid-template-columns:repeat(3,1fr)}.cs-head{flex-direction:column;align-items:flex-start;gap:8px}}
 [hidden]{display:none!important}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 @keyframes pop{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:none}}
@@ -133,12 +155,19 @@ addEventListener("load",()=>{
   </div>
 </div>
 <div class="overlay" id="ovCountry" hidden>
-  <section class="steps" aria-labelledby="cTitle">
-    <div class="stepbar"><button class="back" id="cBack" aria-label="로그인 화면으로">‹</button>
-      <span class="stepno">팀 선택 · 1 / 4 단계</span>
-      <ol class="dots" aria-hidden="true"><li class="on"></li><li></li><li></li><li></li></ol></div>
-    <h2 id="cTitle">코치할 국가 선택</h2>
+  <section class="cs" aria-labelledby="cTitle">
+    <header class="cs-head">
+      <h2 id="cTitle"><small>팀 선택</small>코치할 국가 선택</h2>
+      <div class="cs-prog"><span>1/4단계</span><div class="cs-bar" role="progressbar" aria-label="팀 선택 진행" aria-valuemin="1" aria-valuemax="4" aria-valuenow="1"><i></i></div></div>
+    </header>
+    <nav class="cs-tabs" aria-label="팀 선택 단계"><span class="done">남자</span><span class="on" aria-current="step">국가</span><span class="off">대회</span><span class="off">구단 팀</span></nav>
     <div class="cgrid" id="cGrid"></div>
+    <footer class="cs-foot">
+      <button class="sbtn sp" id="cMode" type="button">모드 선택</button>
+      <button class="sbtn" id="cRandom" type="button">무작위 팀</button>
+      <button class="sbtn pri" id="cOk" type="button" disabled>확인</button>
+    </footer>
+    <p class="cs-toast" id="cToast" aria-live="polite"></p>
   </section>
 </div>
 <div class="overlay" id="ovTitle">
@@ -970,8 +999,8 @@ function setMode(m){
   const inGame=m==="playing"||m==="paused";
   $("hud").hidden=MENU.has(m); $("corner").hidden=!inGame; $("pad").hidden=m!=="playing";
   if (m!=="playing"){ $("msg").hidden=true; keys.clear(); stick.id=null; stick.x=stick.z=0; S.charge=null; S.press=0; }
-  if (m==="login") showLogin(); if (m==="title") showWho();
-  ({login:$("bGuest"),country:document.querySelector(".ccard"),title:$("bStart"),paused:$("bResume"),full:$("bRestart2")})[m]?.focus(m==="country"?{focusVisible:false}:undefined);
+  if (m==="login") showLogin(); if (m==="title") showWho(); if (m==="country") selectCountry(SAVE.country);
+  ({login:$("bGuest"),country:document.querySelector(".ccard[aria-pressed=\"true\"]")||$("cBack"),title:$("bStart"),paused:$("bResume"),full:$("bRestart2")})[m]?.focus(m==="country"?{focusVisible:false}:undefined);
 }
 function start(){ resetState(); setMode("playing"); }
 
@@ -1443,12 +1472,23 @@ for (const b of document.querySelectorAll(".act")){
   b.addEventListener("contextmenu",e=>e.preventDefault());
 }
 { const g=$("cGrid");                       // 국가 칸 만들기(이름은 textContent로)
+  const prev=document.createElement("button"); prev.className="ccard prev"; prev.type="button"; prev.id="cBack";
+  prev.innerHTML='<b aria-hidden="true">‹</b><span>이전</span>'; prev.onclick=()=>setMode("login"); g.appendChild(prev);
   for (const c of COUNTRIES){
-    const b=document.createElement("button"); b.className="ccard"; b.type="button"; b.dataset.id=c.id;
+    const b=document.createElement("button"); b.className="ccard"; b.type="button"; b.dataset.id=c.id; b.setAttribute("aria-pressed","false");
     b.innerHTML=`<svg viewBox="0 0 30 20" aria-hidden="true">${c.flag}</svg><span></span>`;   // 고정된 국기 데이터만
-    b.querySelector("span").textContent=c.name; b.onclick=()=>pickCountry(c.id); g.appendChild(b);
+    b.querySelector("span").textContent=c.name; b.onclick=()=>{ if (cSel===c.id) pickCountry(c.id); else selectCountry(c.id); }; g.appendChild(b);
   } }
-$("cBack").onclick=()=>setMode("login");
+let cSel=null, toastT=0;
+function selectCountry(id){                  // 칸 터치: 선택(파란 테두리) → 확인 / 같은 칸 한 번 더 터치로 다음 단계
+  cSel=id;
+  for (const b of document.querySelectorAll(".ccard[data-id]")) b.setAttribute("aria-pressed",String(b.dataset.id===id));
+  $("cOk").disabled=!id;
+}
+function cToast(t){ $("cToast").textContent=t; clearTimeout(toastT); toastT=setTimeout(()=>$("cToast").textContent="",1800); }
+$("cOk").onclick=()=>{ if (cSel) pickCountry(cSel); };
+$("cRandom").onclick=()=>{ const c=COUNTRIES[Math.floor(Math.random()*COUNTRIES.length)]; selectCountry(c.id); cToast(`${c.name} 선택됨 · 확인을 누르세요`); };
+$("cMode").onclick=()=>cToast("모드 선택은 준비 중이에요");
 $("bGoogle").onclick=loginGoogle; $("bGuest").onclick=loginGuest;
 $("bLogout").onclick=()=>setMode("login");
 $("bStart").onclick=start; $("bRestart1").onclick=start; $("bRestart2").onclick=start;
