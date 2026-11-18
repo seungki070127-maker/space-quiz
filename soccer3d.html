@@ -276,10 +276,11 @@ addEventListener("load",()=>{
         <h3>프로필 생성</h3>
         <label class="sr" for="pName">코치 이름</label>
         <input class="pf-in" id="pName" type="text" maxlength="20" placeholder="이름" autocomplete="off" enterkeyhint="done">
-        <input class="pf-in" type="text" placeholder="성" disabled aria-label="성 (아직 쓸 수 없음)">
+        <label class="sr" for="pLast">코치 성</label>
+        <input class="pf-in" id="pLast" type="text" maxlength="20" placeholder="성" autocomplete="off" enterkeyhint="done">
         <button class="pf-in pf-nat" id="pNat" type="button" aria-haspopup="dialog">국적 선택</button>
         <div class="pf-sex" role="group" aria-label="성별"><button type="button" data-sex="m" aria-pressed="true">남성</button><button type="button" data-sex="f" aria-pressed="false">여성</button></div>
-        <p class="pf-note">지금은 이름, 국적, 성별을 정할 수 있어요</p>
+        <p class="pf-note">지금은 이름, 성, 국적, 성별을 정할 수 있어요</p>
       </div>
       <div class="pf-box">
         <div class="pf-lb">훈련 방식</div>
@@ -784,7 +785,7 @@ function loadSave(){
     if (!COUNTRIES.some(c=>c.id===sv.country)) sv.country=null;
     if (typeof sv.league!=="string" || !/^[a-z]{3}\d$/.test(sv.league)) sv.league=null;
     if (typeof sv.club!=="string" || !/^[a-z]{3}$/.test(sv.club)) sv.club=null;
-    if (sv.coach && typeof sv.coach==="object" && typeof sv.coach.name==="string" && sv.coach.name.trim()) sv.coach={ name:sv.coach.name.trim().slice(0,20), sex:sv.coach.sex==="f"?"f":"m", nat:typeof sv.coach.nat==="string"&&/^[A-Z]{2,3}$/.test(sv.coach.nat)?sv.coach.nat:null }; else sv.coach=null;
+    if (sv.coach && typeof sv.coach==="object" && typeof sv.coach.name==="string" && sv.coach.name.trim()) sv.coach={ name:sv.coach.name.trim().slice(0,20), last:typeof sv.coach.last==="string"?sv.coach.last.trim().slice(0,20):"", sex:sv.coach.sex==="f"?"f":"m", nat:typeof sv.coach.nat==="string"&&/^[A-Z]{2,3}$/.test(sv.coach.nat)?sv.coach.nat:null }; else sv.coach=null;
     return sv;
   }catch{ return { ...DEFAULT_SAVE }; }
 }
@@ -814,7 +815,7 @@ function showWho(){
   const ct=COUNTRIES.find(c=>c.id===SAVE.country);
   const lg=leagueName(SAVE.league), cb=clubById(SAVE.club);
   const co=SAVE.coach;
-  $("who").textContent = (co ? `코치 ${co.name}(${[natById(co.nat)?.name,co.sex==="f"?"여성":"남성"].filter(Boolean).join(", ")}) · ` : "") + (cb ? `${cb.name} · ` : ct ? `${ct.name} · ` : "") + (lg ? `${lg} · ` : "") + (!a ? "" : (a.type==="google" ? `${a.name||"Google 계정"}` : `게스트 ${SAVE.guest.tag}`) + (t ? ` · ${statLine(t)}` : ""));
+  $("who").textContent = (co ? `코치 ${coachFull(co)}(${[natById(co.nat)?.name,co.sex==="f"?"여성":"남성"].filter(Boolean).join(", ")}) · ` : "") + (cb ? `${cb.name} · ` : ct ? `${ct.name} · ` : "") + (lg ? `${lg} · ` : "") + (!a ? "" : (a.type==="google" ? `${a.name||"Google 계정"}` : `게스트 ${SAVE.guest.tag}`) + (t ? ` · ${statLine(t)}` : ""));
 }
 /* Google 로그인 연결 자리.
    나중에 연동할 때: 1) AUTH.googleClientId 에 Google Cloud OAuth 클라이언트 ID를 넣고
@@ -934,15 +935,17 @@ function renderNat(q){
 /* ===== 코치 프로필 (3/4): 이름·국적·성별 입력 ===== */
 let pSex="m", pToastT=0;
 function openProfile(){
-  const c=SAVE.coach; $("pName").value=c?c.name:""; setSex(c?c.sex:"m"); setNat(c?c.nat:null); $("natPick").hidden=true; checkProfile();
+  const c=SAVE.coach; $("pName").value=c?c.name:""; $("pLast").value=c?c.last:""; setSex(c?c.sex:"m"); setNat(c?c.nat:null); $("natPick").hidden=true; checkProfile();
 }
+// 한글 이름이면 "성이름"(손흥민), 그 밖에는 "이름 성"(Mikel Arteta)
+function coachFull(c){ if (!c.last) return c.name; return /^[가-힣]+$/.test(c.last+c.name) ? c.last+c.name : `${c.name} ${c.last}`; }
 function setSex(x){ pSex=x==="f"?"f":"m"; for (const b of document.querySelectorAll(".pf-sex button")) b.setAttribute("aria-pressed",String(b.dataset.sex===pSex)); }
 const cleanName=v=>String(v||"").replace(/\s+/g," ").trim().slice(0,20);
 function checkProfile(){ $("pOk").disabled=!cleanName($("pName").value); }
 function saveProfile(){
   const name=cleanName($("pName").value);
   if (!name){ pToast("코치 이름을 적어 주세요"); $("pName").focus(); return; }
-  SAVE.coach={ name, sex:pSex, nat:pNat }; writeSave(); setMode("title");
+  SAVE.coach={ name, last:cleanName($("pLast").value), sex:pSex, nat:pNat }; writeSave(); setMode("title");
 }
 function pToast(t){ $("pToast").textContent=t; clearTimeout(pToastT); pToastT=setTimeout(()=>$("pToast").textContent="",1800); }
 function loginGuest(){ ensureGuest(); SAVE.account={ type:"guest" }; writeSave(); setMode("country"); }
@@ -1750,7 +1753,7 @@ const PICK={
   league:  makePicker("l",{ items:()=>leaguesFor(SAVE.country).map(l=>({ ...l, icon:shieldIcon(l.tier) })), back:()=>setMode("country"), pick:pickLeague }),
 };
 $("pName").addEventListener("input",checkProfile);
-$("pName").addEventListener("keydown",e=>{ if (e.key==="Enter"){ e.preventDefault(); saveProfile(); } });
+for (const id of ["pName","pLast"]) $(id).addEventListener("keydown",e=>{ if (e.key==="Enter"){ e.preventDefault(); saveProfile(); } });
 for (const b of document.querySelectorAll(".pf-sex button")) b.onclick=()=>setSex(b.dataset.sex);
 $("pOk").onclick=saveProfile;
 $("pNat").onclick=openNat; $("natX").onclick=closeNat;
