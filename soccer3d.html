@@ -78,6 +78,24 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
 .ccard svg{width:40%;max-width:96px;aspect-ratio:3/2;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.45),0 0 0 2px rgba(255,255,255,.12)}
 .ccard svg.shield{width:auto;height:38%;max-height:54px;aspect-ratio:6/7;border-radius:0;box-shadow:none;filter:drop-shadow(0 2px 6px rgba(0,0,0,.45))}
 .ccard .nm{text-align:center;line-height:1.3;word-break:keep-all}
+.ccard svg.crest{width:auto;height:34%;max-height:46px;aspect-ratio:1;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.45)}
+.cbody{display:grid;grid-template-columns:1fr minmax(200px,31%);gap:clamp(10px,1.8vw,22px);min-height:0}
+.cbody .cgrid{grid-template-columns:repeat(4,1fr);grid-auto-rows:clamp(80px,26vh,130px);align-content:start}
+.cinfo{display:flex;flex-direction:column;align-items:center;gap:2px;min-height:0;overflow:auto;padding:0 0 10px;text-align:center;
+  background:rgba(14,28,66,.72);border:1px solid var(--line);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.cinfo h3{align-self:stretch;margin:0 0 6px;padding:clamp(6px,1.6vh,12px) 8px;font-size:clamp(16px,2.4vw,22px);font-weight:700;color:#fff;background:var(--club,#3d8ef0)}
+.cinfo dt{margin-top:clamp(2px,.8vh,8px);font-size:clamp(11px,1.5vw,14px);color:var(--sub)}
+.cinfo dd{margin:0;font-size:clamp(14px,2vw,19px);font-weight:600}
+.cinfo .empty{margin:auto;padding:12px;color:var(--sub);font-size:14px}
+.stars{position:relative;display:inline-block;font-size:clamp(18px,2.8vw,26px);letter-spacing:2px;line-height:1.1;color:rgba(255,255,255,.18)}
+.stars i{position:absolute;inset:0 auto 0 0;overflow:hidden;white-space:nowrap;color:#ffc93c;font-style:normal;width:calc(var(--v)/5*100%)}
+.stars+small{display:block;font-size:12px;color:var(--sub)}
+@media (max-height:460px) and (min-aspect-ratio:1/1){          /* 휴대폰 가로: 한 화면에 더 많이 보이게 촘촘하게 */
+  .cs{gap:6px}.cs-head h2{font-size:15px}.cs-tabs span{padding:5px 6px;font-size:13px}
+  .cbody .cgrid{grid-auto-rows:66px;gap:6px}.cbody .ccard{gap:3px;padding:4px;font-size:12.5px}.cbody .ccard svg.crest{height:24px}
+  .cinfo h3{font-size:15px;padding:5px 6px;margin-bottom:2px}.cinfo dt{margin-top:1px;font-size:11px}.cinfo dd{font-size:13.5px}
+  .stars{font-size:16px}.stars+small{font-size:11px}.sbtn{min-height:38px}
+}
 .ccard.prev{background:rgba(40,70,130,.6)}
 .ccard.prev b{font-size:clamp(24px,4vw,36px);line-height:1}
 .ccard:hover{background:rgba(30,52,110,.75)}
@@ -85,7 +103,7 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
 .ccard[aria-pressed="true"]{background:rgba(61,142,240,.32);border:2px solid var(--blue);box-shadow:0 0 0 2px rgba(61,142,240,.3),0 0 18px rgba(61,142,240,.45)}
 .ccard[aria-pressed="true"]::after{content:"✓";position:absolute;top:6px;right:6px;width:20px;height:20px;border-radius:50%;background:var(--blue);color:#fff;font-size:12px;line-height:20px}
 .cs-foot{display:grid;grid-template-columns:1fr .9fr 1fr 1fr;gap:clamp(8px,1.6vw,20px);align-items:center}
-.cs-foot .sp{grid-column:1}.cs-foot #cRandom,.cs-foot #lRandom{grid-column:3}
+.cs-foot .sp{grid-column:1}.cs-foot [id$="Random"]{grid-column:3}
 .sbtn{font:inherit;font-weight:600;font-size:clamp(14px,2vw,18px);min-height:44px;padding:6px 14px;cursor:pointer;border-radius:3px;
   color:var(--ink);background:rgba(14,26,62,.75);border:1px solid var(--line)}
 .sbtn.pri{background:#2b3fd1;border-color:#2b3fd1;color:#fff}
@@ -97,7 +115,8 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
 @media (max-aspect-ratio:1/1){
   .csov::before{background-image:var(--bgP)}
   .cgrid{grid-template-columns:repeat(3,1fr)}.cs-head{flex-direction:column;gap:8px}
-  .cs-foot{grid-template-columns:1fr 1fr 1fr}.cs-foot #cRandom,.cs-foot #lRandom{grid-column:auto}
+  .cs-foot{grid-template-columns:1fr 1fr 1fr}.cs-foot [id$="Random"]{grid-column:auto}
+  .cbody{grid-template-columns:1fr;grid-template-rows:1fr auto}.cbody .cgrid{grid-template-columns:repeat(3,1fr);grid-auto-rows:clamp(84px,12vh,120px)}.cinfo{max-height:34vh}
 }
 [hidden]{display:none!important}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
@@ -191,6 +210,25 @@ addEventListener("load",()=>{
       <button class="sbtn pri" id="lOk" type="button" disabled>확인</button>
     </footer>
     <p class="cs-toast" id="lToast" aria-live="polite"></p>
+  </section>
+</div>
+<div class="overlay csov" id="ovClub" hidden>
+  <section class="cs" aria-labelledby="kTitle">
+    <header class="cs-head">
+      <h2 id="kTitle"><small>팀 선택</small>코치할 구단 선택</h2>
+      <div class="cs-prog"><span>1/4단계</span><div class="cs-bar" role="progressbar" aria-label="팀 선택 진행" aria-valuemin="1" aria-valuemax="4" aria-valuenow="1"><i></i></div></div>
+    </header>
+    <nav class="cs-tabs" aria-label="팀 선택 단계"><span class="done">남자</span><span class="done" id="kCountry">국가</span><span class="done" id="kLeague">대회</span><span class="on" aria-current="step">구단 팀</span></nav>
+    <div class="cbody">
+      <div class="cgrid" id="kGrid"></div>
+      <aside class="cinfo" id="kInfo" aria-live="polite"><p class="empty">구단을 누르면 정보가 나와요</p></aside>
+    </div>
+    <footer class="cs-foot">
+      <button class="sbtn sp" id="kMode" type="button">모드 선택</button>
+      <button class="sbtn" id="kRandom" type="button">무작위 팀</button>
+      <button class="sbtn pri" id="kOk" type="button" disabled>확인</button>
+    </footer>
+    <p class="cs-toast" id="kToast" aria-live="polite"></p>
   </section>
 </div>
 <div class="overlay" id="ovTitle">
@@ -299,7 +337,7 @@ const dist = (a,b) => hyp(a.x-b.x, a.z-b.z);
 
 /* ===== 상태 ===== */
 const S = { mode:"title" };
-const MENU=new Set(["login","country","league","title"]);         // 경기 전 메뉴 화면들
+const MENU=new Set(["login","country","league","club","title"]);         // 경기 전 메뉴 화면들
 const ball = {};
 let players = [];
 function resetState(){
@@ -659,7 +697,7 @@ const COUNTRIES=[                                   // 국기는 SVG로 직접 �
   { id:"ger", name:"독일",     flag:'<rect width="30" height="6.67" fill="#000"/><rect y="6.67" width="30" height="6.67" fill="#dd0000"/><rect y="13.33" width="30" height="6.67" fill="#ffce00"/>' },
   { id:"fra", name:"프랑스",   flag:'<rect width="10" height="20" fill="#002395"/><rect x="10" width="10" height="20" fill="#fff"/><rect x="20" width="10" height="20" fill="#ed2939"/>' },
 ];
-const DEFAULT_SAVE={ v:1, account:null, guest:null, country:null, league:null };      // account: {type:"guest"} | {type:"google", sub, name}
+const DEFAULT_SAVE={ v:1, account:null, guest:null, country:null, league:null, club:null };      // account: {type:"guest"} | {type:"google", sub, name}
 const newStats=()=>({ played:0, win:0, draw:0, loss:0, gf:0, ga:0 });
 function cleanStats(t){ const o=newStats(); if (t && typeof t==="object") for (const k in o){ const n=Number(t[k]); if (Number.isFinite(n) && n>=0) o[k]=Math.floor(n); } return o; }
 function loadSave(){
@@ -670,6 +708,7 @@ function loadSave(){
     if (!sv.account || !["guest","google"].includes(sv.account.type)) sv.account=null;
     if (!COUNTRIES.some(c=>c.id===sv.country)) sv.country=null;
     if (typeof sv.league!=="string" || !/^[a-z]{3}\d$/.test(sv.league)) sv.league=null;
+    if (typeof sv.club!=="string" || !/^[a-z]{3}$/.test(sv.club)) sv.club=null;
     return sv;
   }catch{ return { ...DEFAULT_SAVE }; }
 }
@@ -697,8 +736,8 @@ function showLogin(){
 function showWho(){
   const a=SAVE.account, t=profileStats();
   const ct=COUNTRIES.find(c=>c.id===SAVE.country);
-  const lg=leagueName(SAVE.league);
-  $("who").textContent = (ct ? `${ct.name} 코치 · ` : "") + (lg ? `${lg} · ` : "") + (!a ? "" : (a.type==="google" ? `${a.name||"Google 계정"}` : `게스트 ${SAVE.guest.tag}`) + (t ? ` · ${statLine(t)}` : ""));
+  const lg=leagueName(SAVE.league), cb=clubById(SAVE.club);
+  $("who").textContent = (cb ? `${cb.name} 코치 · ` : ct ? `${ct.name} 코치 · ` : "") + (lg ? `${lg} · ` : "") + (!a ? "" : (a.type==="google" ? `${a.name||"Google 계정"}` : `게스트 ${SAVE.guest.tag}`) + (t ? ` · ${statLine(t)}` : ""));
 }
 /* Google 로그인 연결 자리.
    나중에 연동할 때: 1) AUTH.googleClientId 에 Google Cloud OAuth 클라이언트 ID를 넣고
@@ -734,7 +773,49 @@ function shieldIcon(tier){                           // 대회 등급 방패(금
   return `<svg class="shield" viewBox="0 0 24 28" aria-hidden="true"><path d="M12 1 22 4.5v8.8c0 6.4-4.3 11-10 13.7C6.3 24.3 2 19.7 2 13.3V4.5z" fill="${col}" stroke="rgba(255,255,255,.85)" stroke-width="1.2"/>`+
     `<path d="M12 7.2l1.9 3.9 4.3.6-3.1 3 .7 4.3L12 17l-3.8 2 .7-4.3-3.1-3 4.3-.6z" fill="rgba(20,30,60,.8)"/></svg>`;
 }
-function pickLeague(id){ SAVE.league=id; writeSave(); setMode("title"); }   // 구단 팀 단계가 생기면 여기서 다음으로
+function pickLeague(id){ if (SAVE.league!==id) SAVE.club=null; SAVE.league=id; writeSave(); setMode(clubsFor(id).length ? "club" : "title"); }
+/* ===== 팀 선택: 코치할 구단 (2026/27 프리미어리그 20개 팀) =====
+   rep: 명성(별 5개 만점, 0.5 단위 · 게임용 평가) / cap: 경기장 수용 인원(대략) / col: 구단 색(로고 대신 색 원과 약자) */
+const CLUBS_EPL=[
+  ["ars","아스널","ARS","#ef0107","#fff","마르틴 외데고르","에미레이츠 스타디움",60704,4.5],
+  ["avl","아스톤 빌라","AVL","#670e36","#95bfe5","존 맥긴","빌라 파크",42640,4],
+  ["bou","AFC 본머스","BOU","#da291c","#111","애덤 스미스","바이탈리티 스타디움",11307,3],
+  ["bre","브렌트퍼드","BRE","#e30613","#fff","네이선 콜린스","Gtech 커뮤니티 스타디움",17250,3],
+  ["bha","브라이턴 앤 호브 앨비언","BHA","#0057b8","#fff","루이스 덩크","아멕스 스타디움",31876,3.5],
+  ["che","첼시","CHE","#034694","#fff","리스 제임스","스탬퍼드 브리지",40173,4.5],
+  ["cov","코번트리 시티","COV","#6cabdd","#fff","맷 그라임스","코번트리 빌딩 소사이어티 아레나",32609,2.5],
+  ["cry","크리스털 팰리스","CRY","#1b458f","#c4122e","딘 헨더슨","셀허스트 파크",25486,3.5],
+  ["eve","에버턴","EVE","#003399","#fff","제임스 타코스키","힐 디킨슨 스타디움",52769,3.5],
+  ["ful","풀럼","FUL","#f4f4f4","#111","톰 캐어니","크레이븐 코티지",29589,3],
+  ["hul","헐 시티","HUL","#f5a12d","#111","루이 코일","MKM 스타디움",25586,2.5],
+  ["ips","입스위치 타운","IPS","#0044a9","#fff","다라 오셰이","포트먼 로드",29673,2.5],
+  ["lee","리즈 유나이티드","LEE","#f4f4f4","#1d428a","이선 암파두","엘런드 로드",37645,3],
+  ["liv","리버풀","LIV","#c8102e","#fff","버질 판데이크","안필드",61276,5],
+  ["mci","맨체스터 시티","MCI","#6cabdd","#1c2c5b","후벵 디아스","에티하드 스타디움",61038,5],
+  ["mun","맨체스터 유나이티드","MUN","#da291c","#fbe122","브루누 페르난드스","올드 트래퍼드",74158,4.5],
+  ["new","뉴캐슬 유나이티드","NEW","#241f20","#fff","댄 번","세인트 제임스 파크",52264,4],
+  ["nfo","노팅엄 포레스트","NFO","#dd0000","#fff","라이언 예이츠","시티 그라운드",30404,3.5],
+  ["sun","선덜랜드","SUN","#eb172b","#fff","그라니트 자카","스타디움 오브 라이트",49000,3],
+  ["tot","토트넘 홋스퍼","TOT","#f4f4f4","#132257","미키 판더펜","토트넘 홋스퍼 스타디움",62850,4],
+].map(([id,name,abbr,col,ink,captain,stadium,cap,rep])=>({id,name,abbr,col,ink,captain,stadium,cap,rep}))
+ .sort((a,b)=>(/^[A-Z]/.test(b.name)-/^[A-Z]/.test(a.name)) || a.name.localeCompare(b.name,"ko"));   // 영문(AFC) 먼저, 그다음 가나다
+const clubsFor=lid=> lid==="eng1" ? CLUBS_EPL : [];          // 지금은 잉글랜드 프리미어리그만
+const clubById=id=>CLUBS_EPL.find(c=>c.id===id);
+function crestIcon(c){                                       // 구단 색 원 + 약자(실제 엠블럼 대신)
+  return `<svg class="crest" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18.5" fill="${c.col}" stroke="${c.ink}" stroke-width="3"/>`+
+    `<text x="20" y="24.5" text-anchor="middle" font-size="12" font-weight="800" font-family="system-ui,sans-serif" fill="${c.ink}">${c.abbr}</text></svg>`;
+}
+function showClubInfo(id){
+  const box=$("kInfo"), c=clubById(id); box.textContent="";
+  if (!c){ const p=document.createElement("p"); p.className="empty"; p.textContent="구단을 누르면 정보가 나와요"; box.append(p); return; }
+  const h=document.createElement("h3"); h.textContent=c.name; box.style.setProperty("--club",c.col==="#f4f4f4"?c.ink:c.col); box.append(h);
+  const add=(dt,dd)=>{ const t=document.createElement("dt"); t.textContent=dt; const d=document.createElement("dd"); if (typeof dd==="string") d.textContent=dd; else d.append(dd); box.append(t,d); };
+  const st=document.createElement("span"); st.className="stars"; st.style.setProperty("--v",c.rep); st.setAttribute("role","img"); st.setAttribute("aria-label",`별 5개 중 ${c.rep}개`);
+  st.textContent="★★★★★"; const on=document.createElement("i"); on.textContent="★★★★★"; st.append(on);
+  const sm=document.createElement("small"); sm.textContent=`${c.rep} / 5`; const w=document.createElement("div"); w.append(st,sm);
+  add("명성",w); add("주장",c.captain); add("경기장",c.stadium); add("경기장 수용 인원",c.cap.toLocaleString("ko-KR")+"명");
+}
+function pickClub(id){ SAVE.club=id; writeSave(); setMode("title"); }
 function loginGuest(){ ensureGuest(); SAVE.account={ type:"guest" }; writeSave(); setMode("country"); }
 
 /* ===== 선수 AI / 이동 ===== */
@@ -1033,13 +1114,14 @@ function syncHud(){
 function say(text,dur){ const m=$("msg"); m.textContent=text; m.hidden=false; S.msgT=dur; }
 function setMode(m){
   S.mode=m;
-  $("ovLogin").hidden=m!=="login"; $("ovCountry").hidden=m!=="country"; $("ovLeague").hidden=m!=="league"; $("ovTitle").hidden=m!=="title"; $("ovPause").hidden=m!=="paused"; $("ovFull").hidden=m!=="full";
+  $("ovLogin").hidden=m!=="login"; $("ovCountry").hidden=m!=="country"; $("ovLeague").hidden=m!=="league"; $("ovClub").hidden=m!=="club"; $("ovTitle").hidden=m!=="title"; $("ovPause").hidden=m!=="paused"; $("ovFull").hidden=m!=="full";
   const inGame=m==="playing"||m==="paused";
   $("hud").hidden=MENU.has(m); $("corner").hidden=!inGame; $("pad").hidden=m!=="playing";
   if (m!=="playing"){ $("msg").hidden=true; keys.clear(); stick.id=null; stick.x=stick.z=0; S.charge=null; S.press=0; }
   if (m==="login") showLogin(); if (m==="title") showWho(); if (m==="country") PICK.country.open(SAVE.country);
+  if (m==="club"){ const c=COUNTRIES.find(x=>x.id===SAVE.country); $("kCountry").textContent=c?c.name:"국가"; $("kLeague").textContent=leagueName(SAVE.league)||"대회"; PICK.club.open(SAVE.club); }
   if (m==="league"){ const c=COUNTRIES.find(x=>x.id===SAVE.country); $("lCountry").textContent=c?c.name:"국가"; PICK.league.open(SAVE.league); }
-  ({login:$("bGuest"),country:PICK.country.focusEl(),league:PICK.league.focusEl(),title:$("bStart"),paused:$("bResume"),full:$("bRestart2")})[m]?.focus(m==="country"||m==="league"?{focusVisible:false}:undefined);
+  ({login:$("bGuest"),country:PICK.country.focusEl(),league:PICK.league.focusEl(),club:PICK.club.focusEl(),title:$("bStart"),paused:$("bResume"),full:$("bRestart2")})[m]?.focus(m==="country"||m==="league"||m==="club"?{focusVisible:false}:undefined);
 }
 function start(){ resetState(); setMode("playing"); }
 
@@ -1511,10 +1593,10 @@ for (const b of document.querySelectorAll(".act")){
   b.addEventListener("contextmenu",e=>e.preventDefault());
 }
 /* 선택 화면 공통(국가·대회): 칸 터치=선택, 확인 또는 같은 칸 한 번 더 터치=다음 단계 */
-function makePicker(pre, { items, back, pick }){
+function makePicker(pre, { items, back, pick, onSelect }){
   let sel=null, tt=0; const g=$(pre+"Grid"), ok=$(pre+"Ok");
   const toast=t=>{ $(pre+"Toast").textContent=t; clearTimeout(tt); tt=setTimeout(()=>$(pre+"Toast").textContent="",1800); };
-  function select(id){ sel=id; for (const b of g.querySelectorAll(".ccard[data-id]")) b.setAttribute("aria-pressed",String(b.dataset.id===id)); ok.disabled=!id; }
+  function select(id){ sel=id; for (const b of g.querySelectorAll(".ccard[data-id]")) b.setAttribute("aria-pressed",String(b.dataset.id===id)); ok.disabled=!id; onSelect?.(id); }
   function render(){
     g.replaceChildren();
     const prev=document.createElement("button"); prev.className="ccard prev"; prev.type="button";
@@ -1534,6 +1616,7 @@ function makePicker(pre, { items, back, pick }){
 const flagIcon=c=>`<svg viewBox="0 0 30 20" aria-hidden="true">${c.flag}</svg>`;
 const PICK={
   country: makePicker("c",{ items:()=>COUNTRIES.map(c=>({ id:c.id, name:c.name, icon:flagIcon(c) })), back:()=>setMode("login"), pick:pickCountry }),
+  club:    makePicker("k",{ items:()=>clubsFor(SAVE.league).map(c=>({ id:c.id, name:c.name, icon:crestIcon(c) })), back:()=>setMode("league"), pick:pickClub, onSelect:showClubInfo }),
   league:  makePicker("l",{ items:()=>leaguesFor(SAVE.country).map(l=>({ ...l, icon:shieldIcon(l.tier) })), back:()=>setMode("country"), pick:pickLeague }),
 };
 $("bGoogle").onclick=loginGoogle; $("bGuest").onclick=loginGuest;
