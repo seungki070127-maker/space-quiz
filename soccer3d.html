@@ -104,6 +104,18 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
 .pf-in::placeholder{color:rgba(230,238,255,.75)}
 .pf-in:focus{outline:2px solid var(--blue);outline-offset:0;background:rgba(20,52,120,.7)}
 .pf-in:disabled{opacity:.42;cursor:not-allowed}
+.pf-nat{cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.pf-nat .fl,.np-grid .fl{font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;font-weight:400;line-height:1}
+.natpick{position:absolute;inset:0;z-index:3;display:grid;grid-template-rows:auto 1fr;gap:10px;background:rgba(6,12,36,.94);
+  padding:max(12px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left))}
+.np-head{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center}
+.np-head h3{margin:0;font-size:clamp(16px,2.4vw,22px)}
+.np-q{margin:0;text-align:left}
+.np-x{min-width:44px;padding:6px 10px}
+.np-grid{grid-template-columns:repeat(auto-fill,minmax(112px,1fr));grid-auto-rows:clamp(70px,20vh,104px);align-content:start}
+.np-grid .ccard{font-size:clamp(12px,1.6vw,14px);gap:4px}
+.np-grid .fl{font-size:clamp(28px,4.4vw,40px)}
+.np-empty{grid-column:1/-1;text-align:center;color:var(--sub);padding:20px}
 .pf-sex{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:3px;overflow:hidden}
 .pf-sex button{font:inherit;font-weight:600;font-size:clamp(14px,2vw,18px);padding:clamp(6px,1.4vh,10px);color:#fff;background:rgba(16,40,96,.35);border:0;cursor:pointer}
 .pf-sex button[aria-pressed="true"]{background:#2c5aa8}
@@ -265,9 +277,9 @@ addEventListener("load",()=>{
         <label class="sr" for="pName">코치 이름</label>
         <input class="pf-in" id="pName" type="text" maxlength="20" placeholder="이름" autocomplete="off" enterkeyhint="done">
         <input class="pf-in" type="text" placeholder="성" disabled aria-label="성 (아직 쓸 수 없음)">
-        <input class="pf-in" type="text" placeholder="국적 선택" disabled aria-label="국적 선택 (아직 쓸 수 없음)">
+        <button class="pf-in pf-nat" id="pNat" type="button" aria-haspopup="dialog">국적 선택</button>
         <div class="pf-sex" role="group" aria-label="성별"><button type="button" data-sex="m" aria-pressed="true">남성</button><button type="button" data-sex="f" aria-pressed="false">여성</button></div>
-        <p class="pf-note">지금은 이름과 성별만 정할 수 있어요</p>
+        <p class="pf-note">지금은 이름, 국적, 성별을 정할 수 있어요</p>
       </div>
       <div class="pf-box">
         <div class="pf-lb">훈련 방식</div>
@@ -286,6 +298,12 @@ addEventListener("load",()=>{
       <button class="sbtn pri" id="pOk" type="button" disabled>확인</button>
     </footer>
     <p class="cs-toast" id="pToast" aria-live="polite"></p>
+    <div class="natpick" id="natPick" role="dialog" aria-modal="true" aria-labelledby="natTitle" hidden>
+      <div class="np-head"><h3 id="natTitle">국적 선택</h3>
+        <input class="pf-in np-q" id="natQ" type="search" placeholder="나라 이름 찾기" aria-label="나라 이름 찾기" autocomplete="off">
+        <button class="sbtn np-x" id="natX" type="button" aria-label="닫기">✕</button></div>
+      <div class="cgrid np-grid" id="natGrid"></div>
+    </div>
   </section>
 </div>
 <div class="overlay" id="ovTitle">
@@ -766,7 +784,7 @@ function loadSave(){
     if (!COUNTRIES.some(c=>c.id===sv.country)) sv.country=null;
     if (typeof sv.league!=="string" || !/^[a-z]{3}\d$/.test(sv.league)) sv.league=null;
     if (typeof sv.club!=="string" || !/^[a-z]{3}$/.test(sv.club)) sv.club=null;
-    if (sv.coach && typeof sv.coach==="object" && typeof sv.coach.name==="string" && sv.coach.name.trim()) sv.coach={ name:sv.coach.name.trim().slice(0,20), sex:sv.coach.sex==="f"?"f":"m" }; else sv.coach=null;
+    if (sv.coach && typeof sv.coach==="object" && typeof sv.coach.name==="string" && sv.coach.name.trim()) sv.coach={ name:sv.coach.name.trim().slice(0,20), sex:sv.coach.sex==="f"?"f":"m", nat:typeof sv.coach.nat==="string"&&/^[A-Z]{2,3}$/.test(sv.coach.nat)?sv.coach.nat:null }; else sv.coach=null;
     return sv;
   }catch{ return { ...DEFAULT_SAVE }; }
 }
@@ -796,7 +814,7 @@ function showWho(){
   const ct=COUNTRIES.find(c=>c.id===SAVE.country);
   const lg=leagueName(SAVE.league), cb=clubById(SAVE.club);
   const co=SAVE.coach;
-  $("who").textContent = (co ? `코치 ${co.name}(${co.sex==="f"?"여성":"남성"}) · ` : "") + (cb ? `${cb.name} · ` : ct ? `${ct.name} · ` : "") + (lg ? `${lg} · ` : "") + (!a ? "" : (a.type==="google" ? `${a.name||"Google 계정"}` : `게스트 ${SAVE.guest.tag}`) + (t ? ` · ${statLine(t)}` : ""));
+  $("who").textContent = (co ? `코치 ${co.name}(${[natById(co.nat)?.name,co.sex==="f"?"여성":"남성"].filter(Boolean).join(", ")}) · ` : "") + (cb ? `${cb.name} · ` : ct ? `${ct.name} · ` : "") + (lg ? `${lg} · ` : "") + (!a ? "" : (a.type==="google" ? `${a.name||"Google 계정"}` : `게스트 ${SAVE.guest.tag}`) + (t ? ` · ${statLine(t)}` : ""));
 }
 /* Google 로그인 연결 자리.
    나중에 연동할 때: 1) AUTH.googleClientId 에 Google Cloud OAuth 클라이언트 ID를 넣고
@@ -875,10 +893,48 @@ function showClubInfo(id){
   add("명성",w); add("주장",c.captain); add("경기장",c.stadium); add("경기장 수용 인원",c.cap.toLocaleString("ko-KR")+"명");
 }
 function pickClub(id){ SAVE.club=id; writeSave(); setMode("profile"); }
-/* ===== 코치 프로필 (3/4): 이름·성별만 입력 ===== */
+/* ===== 국적 목록: UN 회원국 193개 + 잉글랜드·스코틀랜드·웨일스·코소보·팔레스타인·바티칸·대만 =====
+   이름은 브라우저의 한국어 나라 이름(Intl.DisplayNames), 국기는 국기 이모지 */
+const NAT_CODES=("AF AL DZ AD AO AG AR AM AU AT AZ BS BH BD BB BY BE BZ BJ BT BO BA BW BR BN BG BF BI CV KH CM CA CF TD CL CN CO KM CG CD CR CI HR CU CY CZ DK DJ DM DO EC EG SV GQ ER EE SZ ET FJ FI FR GA GM GE DE GH GR GD GT GN GW GY HT HN HU IS IN ID IR IQ IE IL IT JM JP JO KZ KE KI KP KR KW KG LA LV LB LS LR LY LI LT LU MG MW MY MV ML MT MH MR MU MX FM MD MC MN ME MA MZ MM NA NR NP NL NZ NI NE NG MK NO OM PK PW PA PG PY PE PH PL PT QA RO RU RW KN LC VC WS SM ST SA SN RS SC SL SG SK SI SB SO ZA SS ES LK SD SR SE CH SY TJ TZ TH TL TG TO TT TN TR TM TV UG UA AE GB US UY UZ VU VE VN YE ZM ZW"+
+  " XK PS VA TW").split(" ");
+const NAT_FIX={ PS:"팔레스타인", CD:"콩고 민주 공화국", CG:"콩고 공화국", GB:"영국" };
+const NAT_ALIAS={ KR:"한국 남한", KP:"북한", GB:"영국 UK 유케이", US:"미국 USA", AE:"UAE", CN:"중국", TW:"타이완", NL:"홀란드", CI:"아이보리코스트", CZ:"체코" };   // 찾기용 다른 이름
+const tagFlag=t=>"\u{1F3F4}"+[...t].map(ch=>String.fromCodePoint(0xE0000+ch.charCodeAt(0))).join("")+"\u{E007F}";
+const NATIONS=(()=>{
+  let dn=null; try{ dn=new Intl.DisplayNames(["ko"],{type:"region"}); }catch{}
+  const flag=c=>String.fromCodePoint(...[...c].map(ch=>0x1F1E6+ch.charCodeAt(0)-65));
+  const list=NAT_CODES.map(c=>({ id:c, name:NAT_FIX[c]||(dn&&dn.of(c))||c, flag:flag(c) }));
+  list.push({ id:"ENG", name:"잉글랜드", flag:tagFlag("gbeng") }, { id:"SCO", name:"스코틀랜드", flag:tagFlag("gbsct") }, { id:"WAL", name:"웨일스", flag:tagFlag("gbwls") });
+  return list.sort((a,b)=>a.name.localeCompare(b.name,"ko"));
+})();
+const natById=id=>NATIONS.find(n=>n.id===id);
+let pNat=null;
+function setNat(id){
+  const n=natById(id); pNat=n?n.id:null; const b=$("pNat"); b.textContent="";
+  if (!n){ b.textContent="국적 선택"; return; }
+  const f=document.createElement("span"); f.className="fl"; f.textContent=n.flag; const t=document.createElement("span"); t.textContent=n.name; b.append(f,t);
+}
+function openNat(){
+  $("natPick").hidden=false; $("natQ").value=""; renderNat("");
+  const cur=document.querySelector('#natGrid .ccard[aria-pressed="true"]');
+  (cur||$("natGrid").querySelector(".ccard")).focus({focusVisible:false}); cur?.scrollIntoView({block:"center"});   // 찾기 칸에 바로 커서를 두지 않음(휴대폰 키보드가 화면을 가리지 않게)
+}
+function closeNat(){ $("natPick").hidden=true; $("pNat").focus(); }
+function renderNat(q){
+  const g=$("natGrid"); g.replaceChildren(); q=q.trim();
+  const list=q ? NATIONS.filter(n=>n.name.includes(q)||(NAT_ALIAS[n.id]||"").includes(q)||n.id.toLowerCase()===q.toLowerCase()) : NATIONS;
+  if (!list.length){ const p=document.createElement("p"); p.className="np-empty"; p.textContent="찾는 나라가 없어요"; g.append(p); return; }
+  for (const n of list){
+    const b=document.createElement("button"); b.type="button"; b.className="ccard"; b.dataset.id=n.id; b.setAttribute("aria-pressed",String(n.id===pNat));
+    const f=document.createElement("span"); f.className="fl"; f.setAttribute("aria-hidden","true"); f.textContent=n.flag;
+    const t=document.createElement("span"); t.className="nm"; t.textContent=n.name; b.append(f,t);
+    b.onclick=()=>{ setNat(n.id); closeNat(); }; g.append(b);
+  }
+}
+/* ===== 코치 프로필 (3/4): 이름·국적·성별 입력 ===== */
 let pSex="m", pToastT=0;
 function openProfile(){
-  const c=SAVE.coach; $("pName").value=c?c.name:""; setSex(c?c.sex:"m"); checkProfile();
+  const c=SAVE.coach; $("pName").value=c?c.name:""; setSex(c?c.sex:"m"); setNat(c?c.nat:null); $("natPick").hidden=true; checkProfile();
 }
 function setSex(x){ pSex=x==="f"?"f":"m"; for (const b of document.querySelectorAll(".pf-sex button")) b.setAttribute("aria-pressed",String(b.dataset.sex===pSex)); }
 const cleanName=v=>String(v||"").replace(/\s+/g," ").trim().slice(0,20);
@@ -886,7 +942,7 @@ function checkProfile(){ $("pOk").disabled=!cleanName($("pName").value); }
 function saveProfile(){
   const name=cleanName($("pName").value);
   if (!name){ pToast("코치 이름을 적어 주세요"); $("pName").focus(); return; }
-  SAVE.coach={ name, sex:pSex }; writeSave(); setMode("title");
+  SAVE.coach={ name, sex:pSex, nat:pNat }; writeSave(); setMode("title");
 }
 function pToast(t){ $("pToast").textContent=t; clearTimeout(pToastT); pToastT=setTimeout(()=>$("pToast").textContent="",1800); }
 function loginGuest(){ ensureGuest(); SAVE.account={ type:"guest" }; writeSave(); setMode("country"); }
@@ -1697,6 +1753,9 @@ $("pName").addEventListener("input",checkProfile);
 $("pName").addEventListener("keydown",e=>{ if (e.key==="Enter"){ e.preventDefault(); saveProfile(); } });
 for (const b of document.querySelectorAll(".pf-sex button")) b.onclick=()=>setSex(b.dataset.sex);
 $("pOk").onclick=saveProfile;
+$("pNat").onclick=openNat; $("natX").onclick=closeNat;
+$("natQ").addEventListener("input",e=>renderNat(e.target.value));
+$("natPick").addEventListener("keydown",e=>{ if (e.key==="Escape"){ e.stopPropagation(); closeNat(); } });
 $("pWorld").onclick=()=>pToast("게임 월드 선택은 준비 중이에요");
 $("pMore").onclick=()=>pToast("추가 옵션은 준비 중이에요");
 $("bGoogle").onclick=loginGoogle; $("bGuest").onclick=loginGuest;
