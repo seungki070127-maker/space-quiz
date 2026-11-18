@@ -143,7 +143,7 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
 .nw-board .c{background:var(--club,#e30613)} .nw-board .f{background:#0d1220;color:#fff;flex-direction:column}
 .nw-board .o{background:#fff;color:#0d1220;font-size:clamp(12px,2.4vw,28px);letter-spacing:.06em;box-shadow:inset 0 0 0 1px #e4e6ec}
 .nw-board .k{background:#2d2f35} .nw-board .k svg{height:62%;width:auto}
-.nw-man{position:absolute;left:12%;bottom:12%;height:86%;width:auto;filter:drop-shadow(0 0 6px rgba(0,0,0,.5))}
+.nw-man{position:absolute;left:11%;bottom:2%;height:100%;width:auto;filter:drop-shadow(0 0 6px rgba(0,0,0,.5))}
 .nw-tag{position:absolute;top:clamp(8px,1.6vw,18px);right:clamp(5px,.9vw,10px);padding:clamp(3px,.8vh,8px) clamp(18px,4vw,60px);background:#ffd400;color:#111;font-weight:700;font-size:clamp(13px,2vw,24px)}
 .nw-line{position:absolute;left:clamp(5px,.9vw,10px);right:clamp(5px,.9vw,10px);bottom:clamp(5px,.9vw,10px);margin:0;padding:clamp(3px,.8vh,8px) 10px;background:#ffd400;color:#111;font-weight:700;font-size:clamp(14px,2.2vw,26px);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -334,14 +334,30 @@ addEventListener("load",()=>{
   <section class="nw" aria-label="코치 임명 뉴스">
     <div class="nw-tv">
       <div class="nw-board" id="nwBoard" aria-hidden="true"></div>
-      <svg class="nw-man" viewBox="0 0 220 240" aria-hidden="true"><defs>
-          <radialGradient id="nwHead" cx="38%" cy="30%" r="75%"><stop offset="0" stop-color="#3a3a3a"/><stop offset=".45" stop-color="#121212"/><stop offset="1" stop-color="#000"/></radialGradient>
-          <linearGradient id="nwBody" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#262626"/><stop offset="1" stop-color="#000"/></linearGradient></defs>
-          <path d="M8 240c4-38 22-58 56-68l26-8 6-20h28l6 20 26 8c34 10 52 30 56 68z" fill="url(#nwBody)" stroke="rgba(255,255,255,.18)" stroke-width="2"/>
-          <path d="M92 128h36v26c-6 6-30 6-36 0z" fill="#0a0a0a"/>
-          <ellipse cx="62" cy="92" rx="9" ry="15" fill="#0d0d0d"/><ellipse cx="158" cy="92" rx="9" ry="15" fill="#0d0d0d"/>
-          <path d="M110 18c-30 0-50 22-50 58 0 40 20 70 50 70s50-30 50-70c0-36-20-58-50-58z" fill="url(#nwHead)" stroke="rgba(255,255,255,.28)" stroke-width="2"/>
-          <path d="M78 40c10-14 22-18 36-18" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="4" stroke-linecap="round"/></svg>
+      <svg class="nw-man" viewBox="0 0 300 400" aria-hidden="true"><defs>
+          <radialGradient id="nwHead" cx="42%" cy="24%" r="80%"><stop offset="0" stop-color="#2a2a2c"/><stop offset=".35" stop-color="#0c0c0d"/><stop offset="1" stop-color="#000"/></radialGradient>
+          <linearGradient id="nwBody" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#151516"/><stop offset="1" stop-color="#000"/></linearGradient>
+          <linearGradient id="nwRimR" x1="0" y1="0" x2="1" y2="0"><stop offset=".55" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity=".95"/></linearGradient>
+          <linearGradient id="nwRimL" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity=".85"/><stop offset=".4" stop-color="#fff" stop-opacity="0"/></linearGradient>
+          <linearGradient id="nwShine" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".9"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+          <filter id="nwGlow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="1.6"/></filter></defs>
+          <!-- 몸통(어깨·셔츠 깃) -->
+          <path d="M-6 400C2 338 40 310 96 296l30-10 8-30h32l8 30 30 10c56 14 94 42 102 104z" fill="url(#nwBody)"/>
+          <path d="M-6 400C2 338 40 310 96 296l30-10" fill="none" stroke="url(#nwRimL)" stroke-width="5" filter="url(#nwGlow)"/>
+          <path d="M306 400c-8-62-46-90-102-104l-30-10" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="3" filter="url(#nwGlow)"/>
+          <path d="M126 286l24 46 24-46" fill="none" stroke="#000" stroke-width="10" stroke-linejoin="round"/>
+          <path d="M120 282l30 56M180 282l-30 56" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="2"/>
+          <!-- 목 -->
+          <path d="M128 222h44v52c-10 12-34 12-44 0z" fill="#070707"/>
+          <!-- 귀 -->
+          <path d="M92 128c-14-6-22 6-20 24 2 20 10 34 24 34z" fill="#0a0a0a"/>
+          <path d="M208 128c14-6 22 6 20 24-2 20-10 34-24 34z" fill="#0a0a0a"/>
+          <path d="M214 132c10 0 14 10 12 22-2 16-8 26-18 30" fill="none" stroke="#fff" stroke-opacity=".9" stroke-width="3" filter="url(#nwGlow)"/>
+          <!-- 머리(대머리) -->
+          <path d="M150 34C104 34 86 70 88 120c1 42 10 82 30 108 12 16 52 16 64 0 20-26 29-66 30-108 2-50-16-86-62-86z" fill="url(#nwHead)"/>
+          <path d="M150 34C104 34 86 70 88 120c1 42 10 82 30 108 12 16 52 16 64 0 20-26 29-66 30-108 2-50-16-86-62-86z" fill="none" stroke="url(#nwRimR)" stroke-width="5" filter="url(#nwGlow)"/>
+          <path d="M104 70c12-22 30-30 52-30 22 0 40 10 48 30" fill="none" stroke="url(#nwShine)" stroke-width="7" stroke-linecap="round" filter="url(#nwGlow)"/>
+        </svg>
       <span class="nw-tag">뉴스 속보</span>
       <p class="nw-line" id="nwLine" aria-live="polite"></p>
     </div>
