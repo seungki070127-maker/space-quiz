@@ -529,7 +529,7 @@ addEventListener("load",()=>{
     </aside>
     <main class="hm-main">
       <header class="hm-top">
-        <div><small id="hmSeason">SEASON 2026/27</small><h2 id="hmHello"></h2></div>
+        <div><small id="hmSeason">SEASON 2026/27</small></div>
         <div class="hm-tr">
           <div class="hm-coin"><i aria-hidden="true">C</i><span id="hmCoin" aria-label="코인"></span><button type="button" data-soon="코인 충전" aria-label="코인 충전">+</button></div>
           <button class="hm-bell" type="button" data-soon="알림" aria-label="알림"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0112 0v5l2 2H4z"/><path d="M10 20a2 2 0 004 0"/></svg></button>
@@ -540,7 +540,7 @@ addEventListener("load",()=>{
           <div class="hm-mh"><span id="hmNext">NEXT MATCH</span><span id="hmMd"></span></div>
           <div class="hm-vs">
             <div class="hm-team" id="hmHome"></div>
-            <div class="hm-cd"><small>킥오프까지</small><div class="t" id="hmCd" aria-live="off"></div><span class="st" id="hmStad"></span></div>
+            <div class="hm-cd"><span class="st" id="hmStad"></span></div>
             <div class="hm-team" id="hmAway"></div>
           </div>
           <button class="hm-go" id="hmGo" type="button"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>경기 시작</span><span aria-hidden="true">→</span></button>
@@ -1234,7 +1234,7 @@ function openNews(){
 }
 /* ===== 홈 화면 ===== */
 const LG_EN={ eng1:"PREMIER LEAGUE", eng2:"LEAGUE ONE", eng4:"LEAGUE TWO", esp1:"LA LIGA", ita1:"SERIE A", ger1:"BUNDESLIGA", fra1:"LIGUE 1" };
-let hmTimer=0, hmToastT=0;
+let hmToastT=0;
 function homeShield(c,label){                        // 큰 방패 모양 엠블럼(구단 색 + 약자)
   const col=c?c.col:"#d9f24a", txt=c?crestText(c):"#16191d", ab=c?c.abbr:"FC";
   const gid="hs"+Math.random().toString(36).slice(2,8);
@@ -1260,8 +1260,6 @@ function homeOpponent(list,me){ if (!list.length) return null; const i=Math.max(
 function openHome(){
   const co=SAVE.coach||{name:"코치"}, club=clubById(SAVE.club), ct=COUNTRIES.find(x=>x.id===SAVE.country);
   const list=clubsFor(SAVE.league), opp=homeOpponent(list,SAVE.club), lgName=leagueName(SAVE.league)||"친선 경기";
-  const h=new Date().getHours();
-  $("hmHello").textContent=`${h<5?"늦은 밤이에요":h<12?"좋은 아침입니다":h<18?"좋은 오후입니다":"좋은 저녁입니다"}, 코치님.`;
   const full=coachFull(co); $("hmName").textContent=full; $("hmAv").textContent=[...full.replace(/\s/g,"")].slice(0,2).join("").toUpperCase(); $("hmLv").textContent="Lv. 1 코치";
   if (!Number.isFinite(SAVE.coins)) SAVE.coins=10000;
   $("hmCoin").textContent=SAVE.coins.toLocaleString("ko-KR");
@@ -1285,16 +1283,7 @@ function openHome(){
     rows.append(r);
   }
   if (!list.length){ const r=document.createElement("p"); r.className="hm-row"; r.style.gridTemplateColumns="1fr"; r.textContent="이 대회는 아직 팀 정보가 없어요"; rows.append(r); }
-  // 킥오프 카운트다운(처음 들어온 순간 기준 2시간 14분 37초)
-  if (!Number.isFinite(SAVE.kickoffAt) || SAVE.kickoffAt<Date.now()-864e5) { SAVE.kickoffAt=Date.now()+((2*60+14)*60+37)*1000; }
-  writeSave(); tickHome(); clearInterval(hmTimer); hmTimer=setInterval(tickHome,1000);
-}
-function tickHome(){
-  if (S.mode!=="home"){ clearInterval(hmTimer); return; }
-  let sec=Math.max(0,Math.round((SAVE.kickoffAt-Date.now())/1000));
-  const p=[Math.floor(sec/3600),Math.floor(sec/60)%60,sec%60].map(v=>String(v).padStart(2,"0"));
-  const el=$("hmCd"); el.textContent="";
-  ["시간","분","초"].forEach((u,i)=>{ const s=document.createElement("span"); s.textContent=p[i]; const e=document.createElement("em"); e.textContent=u; s.append(e); el.append(s); if (i<2){ const c=document.createElement("span"); c.textContent=":"; el.append(c); } });
+  writeSave();
 }
 function hmToast(t){ $("hmToast").textContent=t; clearTimeout(hmToastT); hmToastT=setTimeout(()=>$("hmToast").textContent="",1800); }
 function pToast(t){ $("pToast").textContent=t; clearTimeout(pToastT); pToastT=setTimeout(()=>$("pToast").textContent="",1800); }
