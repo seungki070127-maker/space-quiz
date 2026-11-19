@@ -290,6 +290,15 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
 .hm-row .n:last-child{color:#fff;font-weight:800}
 .hm-row .n:first-child{color:#8a908a;font-weight:600}
 .hm-all{color:#b9beb6;font-weight:500;border-top-color:rgba(255,255,255,.06)}
+/* 홈 배경: 앞 화면들과 같은 흐릿한 파랑·보라 우주 그림, 칸들은 반투명 */
+#ovHome.csov{background:#0a1230;color:var(--ht)}
+#ovHome .hm{z-index:1}
+#ovHome .hm-side{background:rgba(6,10,30,.5);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);border-right-color:rgba(150,175,255,.14)}
+#ovHome .hm-top{border-bottom-color:rgba(150,175,255,.14)}
+#ovHome .hm-tbl,#ovHome .hm-coin,#ovHome .hm-bell{background:rgba(8,14,38,.66);border-color:rgba(150,175,255,.2);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+#ovHome .hm-match{border-color:rgba(150,175,255,.2)}
+#ovHome .hm-row,#ovHome .hm-all,#ovHome .hm-tbl header{border-color:rgba(150,175,255,.12)}
+#ovHome .hm-top small,#ovHome .hm-tbl header small,#ovHome .hm-row.hd,#ovHome .hm-row small,#ovHome .hm-me small{color:rgba(205,215,255,.62)}
 .ccard.prev{background:rgba(40,70,130,.6)}
 .ccard.prev b{font-size:clamp(24px,4vw,36px);line-height:1}
 .ccard:hover{background:rgba(30,52,110,.75)}
@@ -504,7 +513,7 @@ addEventListener("load",()=>{
     </div>
   </section>
 </div>
-<div class="overlay" id="ovHome" hidden>
+<div class="overlay csov" id="ovHome" hidden>
   <div class="hm">
     <aside class="hm-side">
       <div class="hm-logo"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7l4 3-1.5 5h-5L8 10z" fill="currentColor"/></svg><span>FC<em>27</em></span></div>
