@@ -185,7 +185,7 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
 .hm-coin button,.hm-bell{border:0;background:none;color:var(--ht);cursor:pointer;font:inherit;font-weight:800;font-size:18px;line-height:1;padding:2px 6px}
 .hm-bell{position:relative}.hm-bell svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2}
 .hm-bell::after{content:"";position:absolute;top:2px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--lime)}
-.hm-body{display:grid;grid-template-columns:1.65fr 1fr;gap:clamp(8px,1.6vw,18px);min-height:0}
+.hm-body{display:grid;grid-template-columns:2.3fr 1fr;gap:clamp(8px,1.6vw,18px);min-height:0}
 .hm-match{position:relative;display:grid;grid-template-rows:auto 1fr auto;padding:clamp(8px,2vh,18px) clamp(10px,2vw,22px);border:1px solid var(--hl);border-radius:14px;overflow:hidden;min-height:0;
   background:linear-gradient(180deg,rgba(14,22,14,.55),rgba(14,22,14,.2) 45%,rgba(10,30,14,.85)),
    repeating-linear-gradient(90deg,#2c5a2a 0 9%,#336532 9% 18%) bottom/100% 46% no-repeat,
@@ -214,8 +214,8 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
 .hm-tbl header h3{margin:2px 0 0;font-size:clamp(14px,2.2vw,22px);font-weight:900}
 .hm-tbl header button{border:0;background:none;color:var(--hs);font-size:18px;cursor:pointer;letter-spacing:2px}
 .hm-rows{flex:1;min-height:0;overflow:auto;font-size:clamp(11px,1.5vw,13px)}
-.hm-row{display:grid;grid-template-columns:22px 26px 1fr 30px 34px;align-items:center;gap:6px;padding:clamp(3px,1vh,8px) clamp(8px,1.4vw,14px);border-top:1px solid var(--hl);border-left:3px solid transparent}
-.hm-row.hd{color:var(--hs);font-size:10px;font-weight:700;border-top:0}
+.hm-row{display:grid;grid-template-columns:16px 22px 1fr 24px 26px;align-items:center;gap:4px;padding:clamp(3px,1vh,8px) clamp(8px,1.4vw,14px);border-top:1px solid var(--hl);border-left:3px solid transparent}
+.hm-row.hd{color:var(--hs);font-size:10px;font-weight:700;border-top:0;white-space:nowrap}
 .hm-row.me{border-left-color:var(--lime);background:rgba(217,242,74,.06)}
 .hm-row svg{height:22px;width:auto}
 .hm-row b{display:block;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1169,6 +1169,17 @@ function homeShield(c,label){                        // 큰 방패 모양 엠블
     `<text x="50" y="58" text-anchor="middle" font-size="30" font-weight="900" font-family="system-ui,sans-serif" fill="${txt}">${ab}</text>`+
     `<text x="50" y="78" text-anchor="middle" font-size="10" font-weight="700" font-family="system-ui,sans-serif" fill="${txt}" opacity=".8">${label}</text></svg>`;
 }
+// 순위 표용 짧은 이름: 많이 쓰는 줄임말, 없으면 뒤에 붙는 말(유나이티드·시티 등)을 떼어 냄
+const SHORT={ "맨체스터 시티":"맨시티", "맨체스터 유나이티드":"맨유", "브라이턴 앤 호브 앨비언":"브라이턴", "노팅엄 포레스트":"노팅엄", "토트넘 홋스퍼":"토트넘",
+  "뉴캐슬 유나이티드":"뉴캐슬", "크리스털 팰리스":"팰리스", "웨스트 브로미치 앨비언":"웨스트브롬", "웨스트햄 유나이티드":"웨스트햄", "울버햄프턴 원더러스":"울브스",
+  "퀸스 파크 레인저스":"QPR", "프레스턴 노스 엔드":"프레스턴", "보루시아 도르트문트":"도르트문트", "보루시아 묀헨글라트바흐":"묀헨글라트바흐", "아인트라흐트 프랑크푸르트":"프랑크푸르트",
+  "아틀레티코 마드리드":"AT 마드리드", "아틀레틱 빌바오":"빌바오", "데포르티보 라코루냐":"데포르티보", "파리 생제르맹":"PSG", "바이에른 뮌헨":"바이에른", "바이어 레버쿠젠":"레버쿠젠" };
+function shortName(n){
+  if (SHORT[n]) return SHORT[n];
+  if (n.length<=7) return n;
+  const t=n.replace(/^(AFC|FC|AC|AS|SC|SV|RB|VfB|TSG|1\. FC)\s+/,"").replace(/\s+(유나이티드|시티|타운|원더러스|로버스|애슬레틱|앨비언|카운티|홋스퍼)$/,"");
+  return t||n;
+}
 function teamBox(el,c,name,side){ el.innerHTML=homeShield(c,"FC27"); const b=document.createElement("b"); b.textContent=name; const s=document.createElement("small"); s.textContent=side; el.append(b,s); }
 function homeOpponent(list,me){ if (!list.length) return null; const i=Math.max(0,list.findIndex(c=>c.id===me)); return list[(i+1)%list.length]===list[i] ? null : list[(i+1)%list.length]; }
 function openHome(){
@@ -1186,7 +1197,7 @@ function openHome(){
   $("hmLgEn").textContent=LG_EN[SAVE.league]||"FC27 LEAGUE";
   // 리그 순위: 시즌 개막 전이라 모두 0경기 — 명성 순 예상 순위, 상위 3팀 + 내 팀
   const rows=$("hmRows"); rows.replaceChildren();
-  const hd=document.createElement("div"); hd.className="hm-row hd"; hd.innerHTML="<span>순위</span><span></span><span>클럽</span><span class='n'>경기</span><span class='n'>승점</span>"; rows.append(hd);
+  const hd=document.createElement("div"); hd.className="hm-row hd"; hd.innerHTML="<span class='n' aria-label='순위'>#</span><span></span><span>클럽</span><span class='n'>경기</span><span class='n'>승점</span>"; rows.append(hd);
   const ranked=[...list].sort((a,b)=>b.rep-a.rep||a.name.localeCompare(b.name,"ko"));
   let show=ranked.slice(0,4); const mi=ranked.findIndex(c=>c.id===SAVE.club);
   if (mi>=4) show=[...ranked.slice(0,3),ranked[mi]];
@@ -1195,7 +1206,7 @@ function openHome(){
     const r=document.createElement("div"); r.className="hm-row"+(c.id===SAVE.club?" me":"");
     const mine=c.id===SAVE.club && t, pts=mine?t.win*3+t.draw:0, pl=mine?t.played:0;
     r.innerHTML=`<span class="n">${ranked.indexOf(c)+1}</span>${crestIcon(c)}<span><b></b><small></small></span><span class="n">${pl}</span><span class="n">${pts}</span>`;
-    r.querySelector("b").textContent=c.name; r.querySelector("small").textContent=mine?`${t.win}승 ${t.draw}무 ${t.loss}패`:"0승 0무 0패";
+    const nb=r.querySelector("b"); nb.textContent=shortName(c.name); nb.title=c.name; r.querySelector("small").textContent=mine?`${t.win}승 ${t.draw}무 ${t.loss}패`:"0승 0무 0패";
     rows.append(r);
   }
   if (!list.length){ const r=document.createElement("p"); r.className="hm-row"; r.style.gridTemplateColumns="1fr"; r.textContent="이 대회는 아직 팀 정보가 없어요"; rows.append(r); }
