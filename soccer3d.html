@@ -1009,6 +1009,12 @@ function finish(){
   $("resTitle").textContent=a>b?"🏆 승리!":a<b?"패배":"무승부";
   $("resMsg").textContent=a>b?"멋진 경기였어요!":a<b?"다음엔 이길 수 있어요.":"팽팽한 승부였어요.";
   recordMatch(a,b);
+  const res=seasonRecord(a,b), nb=$("bRestart2");
+  if (res){
+    const o=clubById(res.opp);
+    $("resMsg").textContent+=` (${res.home?"홈":"원정"} · ${o?o.name:""})`+(res.done?` · 시즌 종료! 최종 ${res.done.rank}위 / ${res.done.of}팀`:"");
+    nb.textContent="다음 경기로"; nb.dataset.next="1"; $("bHome2").hidden=true;
+  } else { nb.textContent="다시 하기"; delete nb.dataset.next; $("bHome2").hidden=false; }
   sfx.whistle(); setMode("full");
 }
 
@@ -1257,32 +1263,97 @@ function shortName(n){
 }
 function teamBox(el,c,name,side){ el.innerHTML=homeShield(c,"FC27"); const b=document.createElement("b"); b.textContent=name; const s=document.createElement("small"); s.textContent=side; el.append(b,s); }
 function homeOpponent(list,me){ if (!list.length) return null; const i=Math.max(0,list.findIndex(c=>c.id===me)); return list[(i+1)%list.length]===list[i] ? null : list[(i+1)%list.length]; }
+/* ===== 시즌 진행 =====
+   · 지난 시즌(2025/26) 최종 순위로 4팀씩 묶어 등급을 정함: 1~4위 상위, 5~8 중상, 9~12 중, 13~16 중하, 17위~ 하 (승격팀은 아래, 강등팀은 2부 맨 위)
+   · 내 경기는 직접 하고, 같은 매치데이의 다른 경기는 확률로 결과를 냄
+   · 홈/원정은 경기마다 50% */
+const LAST_RANK={
+  eng1:"ars mci mun avl liv bou sun bha bre che ful new eve lee cry nfo tot cov ips hul",
+  eng2:"whu bur wol mlw sou mid wrx der nor bir swa brc shu pne qpr wat stk por wba cha blb bwf car lin",
+  esp1:"bar rma vil atm bet cel get ray val rso esp ath osa sev ala elc lev dep mal rac",
+  ita1:"int nap rom com mil juv ata bol laz udi sas tor par cag fio gen lec ven fro mon",
+  ger1:"fcb bvb rbl vfb tsg b04 scf sge fca m05 fcu bmg hsv koe svw s04 elv scp",
+  fra1:"psg rcl los oly oma srf asm rcs tfc fcl pfc bst sco hac aja ogc etr lmf" };
+const TIER_NAME=["상위","중상","중","중하","하"];
+const TIER_P=[ {w:.60,d:.20,l:.20}, {w:.45,d:.25,l:.30}, {w:.33,d:.34,l:.33}, {w:.28,d:.30,l:.42}, {w:.26,d:.23,l:.51} ];
+const MARGIN=[[1,.30],[2,.30],[3,.20],[4,.15],[5,.05]];          // 이긴 팀 기준 득실차(5는 5골 이상)
+const pick=list=>{ let r=Math.random(); for (const [v,p] of list){ if ((r-=p)<0) return v; } return list[list.length-1][0]; };
+function rankOrder(lid, season){                                // 등급 기준이 되는 지난 시즌 순위(시즌을 마치면 그 결과로 바뀜)
+  const ids=clubsFor(lid).map(c=>c.id), base=(season&&season.lastRank)||(LAST_RANK[lid]||"").split(" ");
+  return [...base.filter(id=>ids.includes(id)), ...ids.filter(id=>!base.includes(id))];
+}
+const tierOf=(order,id)=>Math.min(4,Math.floor(Math.max(0,order.indexOf(id))/4));
+function simScore(order,home,away){                             // 두 팀의 등급 확률을 반씩 섞어 결과를 정함
+  const A=TIER_P[tierOf(order,home)], B=TIER_P[tierOf(order,away)];
+  const pw=(A.w+B.l)/2, pl=(A.l+B.w)/2, r=Math.random();
+  if (r<pw||r>=pw+(1-pw-pl)){                                   // 승부가 난 경기
+    const homeWin=r<pw, m=pick(MARGIN), mm=m>=5?5+(Math.random()<.35?1:0):m;   // 5골 이상은 5~6골
+    const lose=pick([[0,.5],[1,.35],[2,.15]]), win=lose+mm;
+    return homeWin?[win,lose]:[lose,win];
+  }
+  const g=pick([[0,.3],[1,.4],[2,.22],[3,.08]]); return [g,g];
+}
+function newSeason(lid, me, lastRank){
+  const ids=clubsFor(lid).map(c=>c.id), opp=ids.filter(id=>id!==me).sort(()=>Math.random()-.5);
+  const order=[...opp, ...[...opp].reverse()];                  // 모든 팀과 두 번씩
+  const table={}; for (const id of ids) table[id]={ p:0,w:0,d:0,l:0,gf:0,ga:0 };
+  return { v:1, league:lid, club:me, md:0, year:(SAVE.season?.year||2026), opp:order, home:order.map(()=>Math.random()<.5), table, lastRank:lastRank||null };
+}
+function season(){
+  const lid=SAVE.league, me=SAVE.club, ids=clubsFor(lid).map(c=>c.id);
+  if (!ids.length || !ids.includes(me)) return null;
+  let s=SAVE.season;
+  const ok=s && s.league===lid && s.club===me && Array.isArray(s.opp) && Array.isArray(s.home) && s.table && typeof s.table==="object" && Number.isFinite(s.md) && s.opp.every(id=>ids.includes(id));
+  if (!ok){ s=SAVE.season=newSeason(lid,me); writeSave(); }
+  return s;
+}
+const sortTable=s=>Object.keys(s.table).sort((a,b)=>{ const A=s.table[a],B=s.table[b]; return (B.w*3+B.d)-(A.w*3+A.d) || (B.gf-B.ga)-(A.gf-A.ga) || B.gf-A.gf || a.localeCompare(b); });
+function addResult(s,h,a,gh,ga){
+  const H=s.table[h], A=s.table[a]; if (!H||!A) return;
+  H.p++; A.p++; H.gf+=gh; H.ga+=ga; A.gf+=ga; A.ga+=gh;
+  if (gh>ga){ H.w++; A.l++; } else if (gh<ga){ A.w++; H.l++; } else { H.d++; A.d++; }
+}
+function seasonRecord(myGoals, oppGoals){                       // 내 경기가 끝나면: 기록 → 같은 매치데이 다른 경기 → 다음 매치데이
+  const s=season(); if (!s || s.md>=s.opp.length) return null;
+  const opp=s.opp[s.md], home=s.home[s.md], me=s.club, order=rankOrder(s.league,s);
+  if (home) addResult(s,me,opp,myGoals,oppGoals); else addResult(s,opp,me,oppGoals,myGoals);
+  const rest=Object.keys(s.table).filter(id=>id!==me&&id!==opp).sort(()=>Math.random()-.5);
+  for (let i=0;i+1<rest.length;i+=2){ const [x,y]=Math.random()<.5?[rest[i],rest[i+1]]:[rest[i+1],rest[i]]; const [g1,g2]=simScore(order,x,y); addResult(s,x,y,g1,g2); }
+  s.md++;
+  let done=null;
+  if (s.md>=s.opp.length){                                      // 시즌 끝: 최종 순위가 다음 시즌 등급 기준
+    const fin=sortTable(s); done={ rank:fin.indexOf(me)+1, of:fin.length };
+    SAVE.season=newSeason(s.league,me,fin); SAVE.season.year=(s.year||2026)+1;
+  }
+  writeSave(); return { opp, home, done };
+}
 function openHome(){
   const co=SAVE.coach||{name:"코치"}, club=clubById(SAVE.club), ct=COUNTRIES.find(x=>x.id===SAVE.country);
-  const list=clubsFor(SAVE.league), opp=homeOpponent(list,SAVE.club), lgName=leagueName(SAVE.league)||"친선 경기";
+  const list=clubsFor(SAVE.league), lgName=leagueName(SAVE.league)||"친선 경기", sz=season();
   const full=coachFull(co); $("hmName").textContent=full; $("hmAv").textContent=[...full.replace(/\s/g,"")].slice(0,2).join("").toUpperCase(); $("hmLv").textContent="Lv. 1 코치";
   if (!Number.isFinite(SAVE.coins)) SAVE.coins=10000;
   $("hmCoin").textContent=SAVE.coins.toLocaleString("ko-KR");
-  $("hmMd").textContent=`${lgName} · 매치데이 ${(profileStats()?.played||0)+1}`;
-  teamBox($("hmHome"),club,club?club.name:(ct?ct.name:"우리 팀"),"HOME");
-  teamBox($("hmAway"),opp,opp?opp.name:"상대 팀","AWAY");
-  $("hmStad").textContent=club?club.stadium:"FC27 스타디움";
+  const y=sz?sz.year:2026; $("hmSeason").textContent=`SEASON ${y}/${String((y+1)%100).padStart(2,"0")}`;
+  const opp=sz?clubById(sz.opp[sz.md]):homeOpponent(list,SAVE.club), atHome=sz?sz.home[sz.md]:true;
+  $("hmMd").textContent=`${lgName} · 매치데이 ${sz?sz.md+1:1}${sz?` / ${sz.opp.length}`:""}`;
+  const meName=club?club.name:(ct?ct.name:"우리 팀"), opName=opp?opp.name:"상대 팀";
+  if (atHome){ teamBox($("hmHome"),club,meName,"HOME"); teamBox($("hmAway"),opp,opName,"AWAY"); }
+  else { teamBox($("hmHome"),opp,opName,"HOME"); teamBox($("hmAway"),club,meName,"AWAY"); }
+  $("hmStad").textContent=(atHome?club:opp)?.stadium||"FC27 스타디움";
   $("hmLgEn").textContent=LG_EN[SAVE.league]||"FC27 LEAGUE";
-  // 리그 순위: 시즌 개막 전이라 모두 0경기 — 명성 순 예상 순위, 상위 3팀 + 내 팀
+  // 리그 순위: 상위 3팀 + 내 팀(4위 안이면 상위 4팀)
   const rows=$("hmRows"); rows.replaceChildren();
   const hd=document.createElement("div"); hd.className="hm-row hd"; hd.innerHTML="<span style='grid-column:1/4'>순위 / 클럽</span><span class='n'>경기</span><span class='n'>승점</span>"; rows.append(hd);
-  const ranked=[...list].sort((a,b)=>b.rep-a.rep||a.name.localeCompare(b.name,"ko"));
-  let show=ranked.slice(0,4); const mi=ranked.findIndex(c=>c.id===SAVE.club);
-  if (mi>=4) show=[...ranked.slice(0,3),ranked[mi]];
-  const t=profileStats();
-  for (const c of show){
-    const r=document.createElement("div"); r.className="hm-row"+(c.id===SAVE.club?" me":"");
-    const mine=c.id===SAVE.club && t, pts=mine?t.win*3+t.draw:0, pl=mine?t.played:0;
-    r.innerHTML=`<span class="n">${ranked.indexOf(c)+1}</span>${homeShield(c,"")}<span><b></b><small></small></span><span class="n">${pl}</span><span class="n">${pts}</span>`;
-    const nb=r.querySelector("b"); nb.textContent=shortName(c.name); nb.title=c.name; r.querySelector("small").textContent=mine?`${t.win}승 ${t.draw}무 ${t.loss}패`:"0승 0무 0패";
-    rows.append(r);
-  }
-  if (!list.length){ const r=document.createElement("p"); r.className="hm-row"; r.style.gridTemplateColumns="1fr"; r.textContent="이 대회는 아직 팀 정보가 없어요"; rows.append(r); }
+  if (sz){
+    const ranked=sortTable(sz), mi=ranked.indexOf(SAVE.club);
+    const show=mi>=4?[...ranked.slice(0,3),ranked[mi]]:ranked.slice(0,4);
+    for (const id of show){
+      const c=clubById(id), t=sz.table[id], r=document.createElement("div"); r.className="hm-row"+(id===SAVE.club?" me":"");
+      r.innerHTML=`<span class="n">${ranked.indexOf(id)+1}</span>${homeShield(c,"")}<span><b></b><small></small></span><span class="n">${t.p}</span><span class="n">${t.w*3+t.d}</span>`;
+      const nb=r.querySelector("b"); nb.textContent=shortName(c.name); nb.title=c.name; r.querySelector("small").textContent=`${t.w}승 ${t.d}무 ${t.l}패`;
+      rows.append(r);
+    }
+  } else { const r=document.createElement("p"); r.className="hm-row"; r.style.gridTemplateColumns="1fr"; r.textContent="이 대회는 아직 팀 정보가 없어요"; rows.append(r); }
   writeSave();
 }
 function hmToast(t){ $("hmToast").textContent=t; clearTimeout(hmToastT); hmToastT=setTimeout(()=>$("hmToast").textContent="",1800); }
@@ -2108,7 +2179,7 @@ $("bLogout").onclick=()=>setMode("login");
 $("hmGo").onclick=start;
 for (const b of document.querySelectorAll("#ovHome [data-soon]")) b.onclick=()=>hmToast(`${b.dataset.soon}은(는) 준비 중이에요`);
 $("bHome1").onclick=$("bHome2").onclick=()=>setMode("home");
-$("bStart").onclick=start; $("bRestart1").onclick=start; $("bRestart2").onclick=start;
+$("bStart").onclick=start; $("bRestart1").onclick=start; $("bRestart2").onclick=()=>{ if ($("bRestart2").dataset.next) setMode("home"); else start(); };
 $("bResume").onclick=()=>setMode("playing");
 $("bPause").onclick=()=>setMode(S.mode==="playing"?"paused":"playing");
 const togglePose=()=>{ showPose=!showPose; $("bPose").setAttribute("aria-pressed",showPose); };
@@ -2117,7 +2188,7 @@ $("bMute").onclick=()=>{ muted=!muted; const b=$("bMute"); b.textContent=muted?"
 
 muted=true; resetState(); muted=false;                    // 타이틀 배경용 초기 배치(소리 없이)
 $("msg").hidden=true; setMode("login");                   // 로딩 화면 → 로그인 화면
-window.GAME={ S, CONFIG, SAVE, AUTH, ball, HL, HW, airReachable, execAirKick, BALL_HOOKS, predictFlight, flightNear, ballHits, bodyParts, get players(){ return players; }, update, press, release, render, proj, updatePose, poseProcedural, renderer, scene, camera, cam,
+window.GAME={ S, CONFIG, SAVE, AUTH, season, seasonRecord, simScore, rankOrder, ball, HL, HW, airReachable, execAirKick, BALL_HOOKS, predictFlight, flightNear, ballHits, bodyParts, get players(){ return players; }, update, press, release, render, proj, updatePose, poseProcedural, renderer, scene, camera, cam,
   LM, POSE_CONNECTIONS, POSE_CLIPS, loadPoseClip, fromMediaPipe, togglePose };   // 포즈 데이터 연결용
 requestAnimationFrame(t=>{ last=t; requestAnimationFrame(frame); });
 })();
