@@ -159,22 +159,22 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
 /* ===== 홈 화면 (코치 선임 뒤) : 짙은 회색 + 라임 포인트 ===== */
 #ovHome{--hb:#16191d;--hc:#1d2126;--hl:rgba(255,255,255,.08);--ht:#eef1e8;--hs:#8e958d;--lime:#d9f24a;
   display:block;padding:0;background:var(--hb);color:var(--ht);overflow:hidden;font-feature-settings:"tnum"}
-.hm{position:absolute;inset:0;display:grid;grid-template-columns:clamp(120px,17vw,210px) 1fr;
+.hm{position:absolute;inset:0;display:grid;grid-template-columns:clamp(98px,12.5vw,170px) 1fr;
   padding:max(8px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) 0}
-.hm-side{display:flex;flex-direction:column;gap:2px;padding:4px max(10px,env(safe-area-inset-left)) 0;border-right:1px solid var(--hl);min-height:0}
-.hm-logo{display:flex;align-items:center;gap:8px;margin:2px 0 clamp(8px,3vh,24px) 4px;font-weight:900;font-size:clamp(17px,2.6vw,26px);letter-spacing:.01em;color:var(--lime)}
+.hm-side{display:flex;flex-direction:column;gap:2px;padding:4px max(6px,env(safe-area-inset-left)) 0;border-right:1px solid var(--hl);min-height:0}
+.hm-logo{display:flex;align-items:center;gap:6px;margin:2px 0 clamp(8px,3vh,24px) 4px;font-weight:900;font-size:clamp(16px,2.3vw,26px);letter-spacing:.01em;color:var(--lime)}
 .hm-logo svg{width:1.3em;height:1.3em}
 .hm-nav{display:flex;flex-direction:column;gap:clamp(0px,.6vh,6px)}
-.hm-nav button,.hm-set{display:flex;align-items:center;gap:10px;padding:clamp(5px,1.4vh,10px) 10px;border:0;border-left:3px solid transparent;border-radius:0 8px 8px 0;
+.hm-nav button,.hm-set{display:flex;align-items:center;gap:7px;padding:clamp(5px,1.4vh,10px) 7px;border:0;border-left:3px solid transparent;border-radius:0 8px 8px 0;
   background:none;color:var(--ht);font:inherit;font-weight:700;font-size:clamp(13px,1.8vw,16px);cursor:pointer;text-align:left;white-space:nowrap}
 .hm-nav button svg,.hm-set svg{width:1.25em;height:1.25em;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .hm-nav button[aria-current="page"]{border-left-color:var(--lime);background:rgba(217,242,74,.07);color:var(--lime)}
 .hm-nav button:hover,.hm-set:hover{background:rgba(255,255,255,.04)}
 .hm-set{margin-top:auto}
 .hm-me{display:flex;align-items:center;gap:8px;padding:clamp(5px,1.4vh,10px) 4px 2px;border-top:1px solid var(--hl);min-width:0}
-.hm-av{flex:none;width:clamp(28px,4.4vw,38px);height:clamp(28px,4.4vw,38px);border-radius:50%;display:grid;place-items:center;background:#2b3036;color:var(--lime);font-weight:800;font-size:12px}
+.hm-av{flex:none;width:clamp(26px,3.8vw,38px);height:clamp(26px,3.8vw,38px);border-radius:50%;display:grid;place-items:center;background:#2b3036;color:var(--lime);font-weight:800;font-size:12px}
 .hm-me b{display:block;font-size:clamp(12px,1.7vw,15px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hm-me small{display:block;color:var(--hs);font-size:11px}
+.hm-me small{display:block;color:var(--hs);font-size:11px;white-space:nowrap}
 .hm-main{display:grid;grid-template-rows:auto 1fr;gap:clamp(6px,1.8vh,16px);padding-left:clamp(10px,2vw,26px);min-height:0}
 .hm-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-top:2px;border-bottom:1px solid var(--hl);padding-bottom:clamp(4px,1.4vh,12px)}
 .hm-top small{display:block;color:var(--hs);font-weight:800;font-size:clamp(10px,1.3vw,12px);letter-spacing:.18em}
@@ -185,7 +185,7 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
 .hm-coin button,.hm-bell{border:0;background:none;color:var(--ht);cursor:pointer;font:inherit;font-weight:800;font-size:18px;line-height:1;padding:2px 6px}
 .hm-bell{position:relative}.hm-bell svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2}
 .hm-bell::after{content:"";position:absolute;top:2px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--lime)}
-.hm-body{display:grid;grid-template-columns:2.3fr 1fr;gap:clamp(8px,1.6vw,18px);min-height:0}
+.hm-body{display:grid;grid-template-columns:1fr clamp(180px,24vw,300px);gap:clamp(8px,1.6vw,18px);min-height:0}
 .hm-match{position:relative;display:grid;grid-template-rows:auto 1fr auto;padding:clamp(8px,2vh,18px) clamp(10px,2vw,22px);border:1px solid var(--hl);border-radius:14px;overflow:hidden;min-height:0;
   background:linear-gradient(180deg,rgba(14,22,14,.55),rgba(14,22,14,.2) 45%,rgba(10,30,14,.85)),
    repeating-linear-gradient(90deg,#2c5a2a 0 9%,#336532 9% 18%) bottom/100% 46% no-repeat,
