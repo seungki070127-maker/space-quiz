@@ -323,6 +323,11 @@ button.mc-row.sel{background:rgba(255,216,74,.14);box-shadow:inset 3px 0 0 #ffd8
 .mc-hint{flex:1;margin:0;text-align:center;font-size:clamp(10.5px,1.5vw,13px);color:rgba(225,232,255,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mc-hr{display:flex;align-items:center;gap:6px}
 .mc-reset{border:1px solid rgba(150,175,255,.3);background:rgba(8,14,38,.6);color:#dfe5ff;border-radius:6px;padding:3px 8px;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+/* 내 클럽: 위쪽 줄(코인·알림)을 숨기고 그 높이까지 경기장에 줌, 스크롤 없이 한 화면에 */
+.hm-main.club{grid-template-rows:1fr}
+.hm-main.club .hm-top{display:none}
+.hm-main.club .mc-pitchbox{overflow:hidden}
+.hm-main.club .mc-pitch{width:min(100%,560px);height:100%;aspect-ratio:auto}
 .mc-cnt{color:rgba(205,215,255,.7);font-size:12px;font-weight:700}
 .mc-row{display:grid;grid-template-columns:22px 26px 1fr;align-items:center;gap:6px;padding:clamp(3px,.9vh,7px) clamp(8px,1.2vw,12px);border-top:1px solid rgba(150,175,255,.12);font-size:clamp(11px,1.5vw,13px)}
 .mc-row .no{font-family:var(--cond);font-weight:700;color:rgba(205,215,255,.7);text-align:center}
@@ -561,9 +566,9 @@ addEventListener("load",()=>{
       <button class="hm-set" type="button" data-soon="설정"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>설정</button>
       <div class="hm-me"><span class="hm-av" id="hmAv"></span><div style="min-width:0"><b id="hmName"></b><small id="hmLv"></small></div></div>
     </aside>
-    <main class="hm-main">
+    <main class="hm-main" id="hmMain">
       <header class="hm-top">
-        <div><small id="hmSeason">SEASON 2026/27</small></div>
+        <div></div>
         <div class="hm-tr">
           <div class="hm-coin"><i aria-hidden="true">C</i><span id="hmCoin" aria-label="코인"></span><button type="button" data-soon="코인 충전" aria-label="코인 충전">+</button></div>
           <button class="hm-bell" type="button" data-soon="알림" aria-label="알림"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0112 0v5l2 2H4z"/><path d="M10 20a2 2 0 004 0"/></svg></button>
@@ -1356,9 +1361,9 @@ function openClub(){
     d.style.left=x+"%"; d.style.top=y+"%"; d.setAttribute("aria-label",`${pl[0]??""}번 ${pl[2]} (선발)`);
     const i=document.createElement("i"); i.textContent=pl[0]??""; const n=document.createElement("span"); n.textContent=plShort(pl); d.append(i,n);
     d.onclick=()=>mcTap("xi",pi); pitch.append(d); };
-  place(0,50,92,true); let n=1;                               // 세로 경기장: 골키퍼는 아래, 위로 공격
+  place(0,50,88,true); let n=1;                               // 세로 경기장: 골키퍼는 아래, 위로 공격
   lines.forEach((count,k)=>{                                   // 뒤쪽 줄부터 위로, 줄 안에서는 오른쪽 측면부터
-    const y=75-k*(62/Math.max(lines.length-1,1));
+    const y=71-k*(58/Math.max(lines.length-1,1));
     for (let i=0;i<count;i++) place(n++,90-(i+.5)/count*80,y,false);
   });
   const starters=new Set(xiIdx), subs=sq.p.map((p,i)=>[p,i]).filter(([,i])=>!starters.has(i));
@@ -1375,7 +1380,7 @@ function openClub(){
 }
 function homeView(v){                                           // 홈 ↔ 내 클럽 전환(왼쪽 메뉴)
   for (const b of document.querySelectorAll(".hm-nav [data-view]")){ if (b.dataset.view===v) b.setAttribute("aria-current","page"); else b.removeAttribute("aria-current"); }
-  $("hmBody").hidden=v!=="home"; $("hmClub").hidden=v!=="club";
+  $("hmBody").hidden=v!=="home"; $("hmClub").hidden=v!=="club"; $("hmMain").classList.toggle("club",v==="club");
   if (v==="club"){ mcSel=null; openClub(); }
 }
 /* ===== 시즌 진행 =====
@@ -1448,7 +1453,6 @@ function openHome(){
   const full=coachFull(co); $("hmName").textContent=full; $("hmAv").textContent=[...full.replace(/\s/g,"")].slice(0,2).join("").toUpperCase(); $("hmLv").textContent="Lv. 1 코치";
   if (!Number.isFinite(SAVE.coins)) SAVE.coins=10000;
   $("hmCoin").textContent=SAVE.coins.toLocaleString("ko-KR");
-  const y=sz?sz.year:2026; $("hmSeason").textContent=`SEASON ${y}/${String((y+1)%100).padStart(2,"0")}`;
   const opp=sz?clubById(sz.opp[sz.md]):homeOpponent(list,SAVE.club), atHome=sz?sz.home[sz.md]:true;
   $("hmMd").textContent=`${lgName} · 매치데이 ${sz?sz.md+1:1}${sz?` / ${sz.opp.length}`:""}`;
   const meName=club?club.name:(ct?ct.name:"우리 팀"), opName=opp?opp.name:"상대 팀";
