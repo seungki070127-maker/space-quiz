@@ -301,13 +301,13 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:
 #ovHome .hm-top small,#ovHome .hm-tbl header small,#ovHome .hm-row.hd,#ovHome .hm-row small,#ovHome .hm-me small{color:rgba(205,215,255,.62)}
 /* 내 클럽: 왼쪽 잔디 위 선발 11명(포메이션), 오른쪽 교체 선수 */
 .hm-club{display:grid;grid-template-columns:1fr clamp(180px,24vw,300px);gap:clamp(8px,1.6vw,18px);min-height:0}
-.mc-pitchbox{display:grid;grid-template-rows:auto 1fr;gap:6px;min-height:0;padding:clamp(6px,1.4vh,12px) clamp(8px,1.4vw,14px);border:1px solid rgba(150,175,255,.2);border-radius:12px;background:rgba(8,14,38,.66)}
+.mc-pitchbox{display:grid;grid-template-rows:auto 1fr;gap:6px;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:clamp(6px,1.4vh,12px) clamp(8px,1.4vw,14px);border:1px solid rgba(150,175,255,.2);border-radius:12px;background:rgba(8,14,38,.66)}
 .mc-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .mc-head small{display:block;font-family:var(--cond);letter-spacing:.22em;font-weight:700;font-size:10px;color:rgba(205,215,255,.62)}
 .mc-head h3{margin:1px 0 0;font-size:clamp(14px,2.2vw,20px);font-weight:800}
 .mc-form{padding:3px 10px;border-radius:6px;background:var(--lime);color:#111;font-family:var(--cond);font-weight:800;font-size:clamp(13px,1.8vw,16px)}
-.mc-pitch{position:relative;min-height:0;border-radius:8px;overflow:hidden;
-  background:repeating-linear-gradient(90deg,#2f7a3a 0 8.33%,#358442 8.33% 16.66%);box-shadow:inset 0 0 40px rgba(0,0,0,.35)}
+.mc-pitch{position:relative;justify-self:center;width:min(100%,380px);aspect-ratio:68/105;border-radius:8px;overflow:hidden;
+  background:repeating-linear-gradient(180deg,#2f7a3a 0 8.33%,#358442 8.33% 16.66%);box-shadow:inset 0 0 40px rgba(0,0,0,.35)}
 .mc-lines{position:absolute;inset:4px;width:calc(100% - 8px);height:calc(100% - 8px)}
 .mc-p{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:1px;width:clamp(56px,11vw,96px);pointer-events:none}
 .mc-p i{width:clamp(22px,3.6vw,32px);height:clamp(22px,3.6vw,32px);border-radius:50%;display:grid;place-items:center;font-style:normal;font-family:var(--cond);font-weight:800;font-size:clamp(11px,1.6vw,14px);
@@ -331,7 +331,7 @@ button.mc-row.sel{background:rgba(255,216,74,.14);box-shadow:inset 3px 0 0 #ffd8
 .mc-row b{display:block;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mc-row .nmw{min-width:0}
 .mc-row small{display:block;color:rgba(205,215,255,.55);font-size:10px;line-height:1.2}
-@media (max-aspect-ratio:1/1){.hm-club{grid-template-columns:1fr;grid-template-rows:1fr auto}.mc-pitch{aspect-ratio:105/68}.mc-bench{max-height:34vh}}
+@media (max-aspect-ratio:1/1){.hm-club{grid-template-columns:1fr;grid-template-rows:1fr auto}.mc-bench{max-height:34vh}}
 .ccard.prev{background:rgba(40,70,130,.6)}
 .ccard.prev b{font-size:clamp(24px,4vw,36px);line-height:1}
 .ccard:hover{background:rgba(30,52,110,.75)}
@@ -589,10 +589,10 @@ addEventListener("load",()=>{
         <section class="mc-pitchbox" aria-labelledby="mcTitle">
           <header class="mc-head"><div><small>STARTING XI</small><h3 id="mcTitle"></h3></div><p class="mc-hint" id="mcHint" aria-live="polite"></p><div class="mc-hr"><button class="mc-reset" id="mcReset" type="button">기본으로</button><span class="mc-form" id="mcForm"></span></div></header>
           <div class="mc-pitch" id="mcPitch">
-            <svg class="mc-lines" viewBox="0 0 105 68" preserveAspectRatio="none" aria-hidden="true"><g fill="none" stroke="rgba(255,255,255,.55)" stroke-width=".45">
-              <rect x="1" y="1" width="103" height="66"/><line x1="52.5" y1="1" x2="52.5" y2="67"/><circle cx="52.5" cy="34" r="9.15"/>
-              <rect x="1" y="13.85" width="16.5" height="40.3"/><rect x="1" y="24.85" width="5.5" height="18.3"/>
-              <rect x="87.5" y="13.85" width="16.5" height="40.3"/><rect x="98.5" y="24.85" width="5.5" height="18.3"/></g></svg>
+            <svg class="mc-lines" viewBox="0 0 68 105" preserveAspectRatio="none" aria-hidden="true"><g fill="none" stroke="rgba(255,255,255,.55)" stroke-width=".45">
+              <rect x="1" y="1" width="66" height="103"/><line x1="1" y1="52.5" x2="67" y2="52.5"/><circle cx="34" cy="52.5" r="9.15"/>
+              <rect x="13.85" y="1" width="40.3" height="16.5"/><rect x="24.85" y="1" width="18.3" height="5.5"/>
+              <rect x="13.85" y="87.5" width="40.3" height="16.5"/><rect x="24.85" y="98.5" width="18.3" height="5.5"/></g></svg>
           </div>
         </section>
         <section class="hm-tbl mc-bench" aria-labelledby="mcBenchT">
@@ -1356,10 +1356,10 @@ function openClub(){
     d.style.left=x+"%"; d.style.top=y+"%"; d.setAttribute("aria-label",`${pl[0]??""}번 ${pl[2]} (선발)`);
     const i=document.createElement("i"); i.textContent=pl[0]??""; const n=document.createElement("span"); n.textContent=plShort(pl); d.append(i,n);
     d.onclick=()=>mcTap("xi",pi); pitch.append(d); };
-  place(0,7,50,true); let n=1;
-  lines.forEach((count,k)=>{                                   // 오른쪽으로 공격: 뒤쪽 줄이 왼쪽, 줄 안에서는 오른쪽(화면 아래)부터
-    const x=24+k*(66/Math.max(lines.length-1,1));
-    for (let i=0;i<count;i++) place(n++,x,90-(i+.5)/count*80,false);
+  place(0,50,92,true); let n=1;                               // 세로 경기장: 골키퍼는 아래, 위로 공격
+  lines.forEach((count,k)=>{                                   // 뒤쪽 줄부터 위로, 줄 안에서는 오른쪽 측면부터
+    const y=75-k*(62/Math.max(lines.length-1,1));
+    for (let i=0;i<count;i++) place(n++,90-(i+.5)/count*80,y,false);
   });
   const starters=new Set(xiIdx), subs=sq.p.map((p,i)=>[p,i]).filter(([,i])=>!starters.has(i));
   const ord={GK:0,DF:1,MF:2,FW:3}; subs.sort(([a],[b])=>(ord[a[1]]??4)-(ord[b[1]]??4)||(a[0]??999)-(b[0]??999));
