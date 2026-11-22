@@ -4,7 +4,7 @@
 pip install numpy fast-simplification matplotlib
 python face.py 모델.fbx 4 18000 0.6   # 면 1만 8천 개로 줄이고 얼굴만 살짝 흐리게(반복 4번, 세기 0.6) → P_low.npy, F_low.npy, 비교 그림
 # P_low → 게임 축([앞, 위, 오른쪽], 키 1.82m) 으로 바꿔 P.npy / F.npy 저장 (face.py 다음 단계, 아래 한 줄)
-python -c "import numpy as np;P=np.load('P_low.npy');s=1.82/(P[:,2].ptp());np.save('P.npy',np.stack([-P[:,1],P[:,2]-P[:,2].min(),-P[:,0]],1)*s);np.save('F.npy',np.load('F_low.npy'))"
+python -c "import numpy as np;P=np.load('P_low.npy');s=1.82/(np.ptp(P[:,2]));np.save('P.npy',np.stack([-P[:,1],P[:,2]-P[:,2].min(),-P[:,0]],1)*s);np.save('F.npy',np.load('F_low.npy'))"
 python bake_fbx.py                      # 관절·옷 경계를 이 모델에 맞춘 bake → body.json
 ```
 
