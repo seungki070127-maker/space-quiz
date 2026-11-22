@@ -689,7 +689,8 @@ const CONFIG = {
   shot:   { min: 34, max: 64, liftBase: 1.5, liftPow: 5.5, error: 0.03, errorPow: 0.07, aimWidth: 4.2 },
   cross:  { min: 28, max: 96, angle: 38, assist: 35 },                   // 비거리, 발사각(도), 조준 보정각(도)
   ball:   { g: 9.8, bounce: 0.55, roll: 0.5, rollFlat: 1.2, air: 0.12 },
-  tackle: { user: 3.0, cpu: 1.2, slideSpeed: 9, slideTime: 0.55 },       // 초당 공 뺏기 확률
+  tackle: { user: 3.0, cpu: 1.2, slideSpeed: 9, slideTime: 0.55 },       // 초당 공 뺏기 확률(상대 팀만 씀. 우리 팀은 발 뻗기 접촉으로만 뺏음)
+  poke:   { range: 1.5, time: 0.34, hitFrom: 0.07, hitTo: 0.24, slack: 0.06, push: 4.5, cool: 0.45, mateCool: 0.9 },   // 발 뻗어 뺏기: 공까지 거리(m) 안이면 뻗음, 동작 시간, 발 판정이 켜지는 구간, 발 판정 여유, 공이 튕겨 나가는 속도
   gk:     { speed: 6.5, dive: 6.0, reach: 1.1, reactMin: 0.17, reactMax: 0.33, catch: 0.6, hold: 1.1, userHold: 8, carry: 4, punt: [28, 62] },   // userHold: 내 골키퍼가 공을 들고 있을 수 있는 시간, carry: 들고 걷는 속도, punt: 슛 버튼 롱킥 거리
   cpu:    { think: 0.3, shootRange: 20, passUrge: 0.1, shotError: 0.15 },
   cam:    { h: 20.4, back: 40.1, pitch: 27, zoom: 0.9, follow: 2.6, yaw: 0, lead: 0.3, aim: 7, ahead: 6 },   // 높이, 뒤로 거리, 내려보는 각(도), 확대(클수록 망원), 따라가는 속도, 골대 쪽으로 도는 각(도, 0 = 안 돎), 공 진행방향 미리보기(초), aim: 공보다 이만큼(m) 카메라 쪽을 화면 중앙에, ahead: 내 팀이 공격하는 방향으로 이만큼(m) 앞을 보여 줌
@@ -799,7 +800,39 @@ function release(type){
   if (ch.own || ch.t>CONFIG.charge.tap) return;
   if (type==="pass") switchPlayer();
   else if (type==="shoot") slide(c);
-  else S.press=CONFIG.charge.pressTime;
+  else { S.press=CONFIG.charge.pressTime; tryPoke(c); }
+}
+/* ===== 발 뻗어 뺏기 (포즈 기반 접촉) =====
+   압박을 누르면(또는 압박 중 공 가까이 가면) 공 쪽 발을 뻗는다. 뻗은 발·정강이 판정 상자(bodyParts)가 공에 실제로 닿을 때만 공이 튕겨 나간다 */
+function tryPoke(p){
+  const P=CONFIG.poke;
+  if (p.pokeT>0 || p.slideT>0 || p.stun>0 || p.kickT>0 || ball.owner===p || ball.y>1.2 || dist(p,ball)>P.range) return false;
+  if (ball.owner && ball.owner.team===p.team) return false;
+  const fx=Math.cos(p.a), fz=Math.sin(p.a), side=(ball.x-p.x)*(-fz)+(ball.z-p.z)*fx;     // 공이 오른쪽이면 오른발
+  p.pokeT=P.time; p.pokeAt=S.time; p.pokeFoot=side>=0?1:-1; p.pokeHit=false; p.a=Math.atan2(ball.z-p.z,ball.x-p.x)-p.pokeFoot*0.25;
+  return true;
+}
+function pokeTick(){
+  const P=CONFIG.poke, K=CONFIG.size.player;
+  for (const p of players){
+    if (!(p.pokeT>0) || p.pokeHit) continue;
+    const t=S.time-p.pokeAt; if (t<P.hitFrom || t>P.hitTo) continue;
+    const parts=bodyParts(p); if (!parts) continue;
+    const L=ballLift(), c=[ball.x,ball.y+L,ball.z], R=p.pokeFoot>0?"R":"L";
+    let hit=false;
+    for (const pt of parts){
+      if (pt.name!=="foot"+R && pt.name!=="shin"+R) continue;
+      const d=segSegDist(c,c,pt.a,pt.b)-pt.r-ball.r-P.slack*K; if (d<0){ hit=true; break; }
+    }
+    if (!hit) continue;
+    p.pokeHit=true; const o=ball.owner;
+    if (o && o.team===p.team) continue;
+    let dx=ball.x-p.x, dz=ball.z-p.z; const dl=hyp(dx,dz)||1; dx/=dl; dz/=dl;          // 발이 닿은 쪽(선수 → 공)으로 툭 쳐 냄
+    if (o){ o.cool=P.cool; o.stun=0.2; S.poss=-1; }
+    ball.owner=null; ball.vx=dx*P.push+p.vx*0.4+rnd(-0.6,0.6); ball.vz=dz*P.push+p.vz*0.4+rnd(-0.6,0.6); ball.vy=0.6; ball.last=p.team;
+    p.cool=0.12; sfx.kick(0.25);
+    if (p===S.ctrl) say("뺏었다!",0.6);
+  }
 }
 function switchPlayer(){
   let best=null, bd=1e9;
@@ -907,7 +940,9 @@ function possession(dt){
       if (q.slideT>0){
         if (d<1.1){ ball.owner=null; ball.vx=q.vx*0.9+rnd(-1,1); ball.vz=q.vz*0.9+rnd(-1,1); ball.vy=1.5; ball.last=q.team;
           o.stun=0.5; o.cool=0.6; S.poss=-1; sfx.kick(0.3); return; }
-      } else if (d<0.85 && Math.random()<(q.team===0?CONFIG.tackle.user:CONFIG.tackle.cpu)*dt){
+      } else if (q.team===0){                              // 우리 팀: 확률 없이 발을 뻗어 닿아야 뺏음
+        if (q===S.ctrl ? S.press>0 : (S.time-(q.lastPoke||-9)>CONFIG.poke.mateCool)) { if (tryPoke(q)) q.lastPoke=S.time; }
+      } else if (d<0.85 && Math.random()<CONFIG.tackle.cpu*dt){
         o.cool=0.7; o.stun=0.25; setOwner(q); return;
       }
     }
@@ -1697,7 +1732,7 @@ function stepPlayers(dt){
   }
   const o=ball.owner;
   for (const p of players){
-    p.cool-=dt; p.kickT-=dt; p.think-=dt; if (p.headT>0) p.headT-=dt;
+    p.cool-=dt; p.kickT-=dt; p.think-=dt; if (p.headT>0) p.headT-=dt; if (p.pokeT>0) p.pokeT-=dt;
     if (p.slideT>0){
       p.slideT-=dt; p.x=clamp(p.x+p.vx*dt,-HL-1.5,HL+1.5); p.z=clamp(p.z+p.vz*dt,-HW-1.5,HW+1.5);
       p.vx*=1-1.8*dt; p.vz*=1-1.8*dt; if (p.slideT<=0) p.stun=0.4; continue;
@@ -1759,7 +1794,7 @@ function update(dt){
   if (S.press>0) S.press-=dt;
   stepPlayers(dt);
   stepBall(dt);
-  if (!S.dead){ airKickTick(); possession(dt); autoSwitch(dt); }
+  if (!S.dead){ airKickTick(); possession(dt); pokeTick(); autoSwitch(dt); }
   syncHud();
 }
 
@@ -1928,13 +1963,30 @@ function updatePose(p){
   const lm=p.lm||(p.lm=newPose()), run=p.run||0;
   const special=p.kickT>0||p.headT>0||p.slideT>0||(p.gk&&(p.dive>0||ball.owner===p))||(S.scorer===p.team&&S.dead);
   const cRun=POSE_CLIPS.run, cIdle=POSE_CLIPS.idle;
-  if (special||(!cRun&&!cIdle)){ poseProcedural(p,lm); if (!special) touchPose(p,lm); return; }
+  if (special||(!cRun&&!cIdle)){ poseProcedural(p,lm); if (!special){ touchPose(p,lm); pokePose(p,lm); } return; }
   // 포즈 데이터 재생: 달리기는 걸음 위상(p.ph)에 맞춰, 서 있기는 시간에 맞춰 재생하고 속도에 따라 둘을 섞는다
   if (cRun) samplePose(cRun,p.ph/(Math.PI*2),tmpA); else { const r=p.run; p.run=1; poseProcedural(p,tmpA); p.run=r; }
   if (cIdle) samplePose(cIdle,(S.time+p.i*0.37)*cIdle.fps/cIdle.frames.length,tmpB); else { const r=p.run; p.run=0; poseProcedural(p,tmpB); p.run=r; }
   const w=sm(run*CONFIG.pose.blend);
   for (let k=0;k<33;k++) for (let c=0;c<3;c++) lm[k][c]=tmpB[k][c]+(tmpA[k][c]-tmpB[k][c])*w;
-  touchPose(p,lm);
+  touchPose(p,lm); pokePose(p,lm);
+}
+// 발 뻗어 뺏기 동작: 공 쪽 발을 공이 있는 자리까지 쭉 뻗었다가(두 관절 IK) 돌아온다. 공을 따라 목표를 매 화면 다시 잡는다
+function pokePose(p,lm){
+  if (!(p.pokeT>0)) return;
+  const T=CONFIG.poke.time, t=T-p.pokeT, peak=T*0.35, w=t<peak ? sm(t/peak) : 1-sm((t-peak)/(T-peak));
+  const K=CONFIG.size.player, fx=Math.cos(p.a), fz=Math.sin(p.a), bx=(ball.x-p.x)/K, bz=(ball.z-p.z)/K;
+  const R=p.pokeFoot>0?1:0, H=lm[LM.L_HIP+R], L1=0.44, L2=0.44;
+  const tx=bx*fx+bz*fz-0.08, tz=bx*(-fz)+bz*fx, ty=0.14;                                // 공 바로 뒤(발 안쪽이 공에 닿게)
+  let dx=tx-H[0], dy=ty-H[1], dz=tz-H[2], d=Math.hypot(dx,dy,dz); const dm=L1+L2-0.01;
+  if (d>dm){ dx*=dm/d; dy*=dm/d; dz*=dm/d; d=dm; }
+  const ux=dx/d, uy=dy/d, uz=dz/d;
+  let nx=1-ux*ux, ny=-ux*uy, nz=-ux*uz; const nl=Math.hypot(nx,ny,nz)||1; nx/=nl; ny/=nl; nz/=nl;
+  const a=(L1*L1-L2*L2+d*d)/(2*d), h=Math.sqrt(Math.max(0,L1*L1-a*a));
+  const knee=[H[0]+ux*a+nx*h, H[1]+uy*a+ny*h, H[2]+uz*a+nz*h], ank=[H[0]+dx, H[1]+dy, H[2]+dz];
+  const goal={ [LM.L_KNEE+R]:knee, [LM.L_ANKLE+R]:ank, [LM.L_HEEL+R]:[ank[0]-0.06,ank[1]-0.05,ank[2]], [LM.L_FOOT+R]:[ank[0]+0.16,ank[1]-0.05,ank[2]+(R?0.03:-0.03)] };
+  for (const k in goal) for (let c=0;c<3;c++) lm[k][c]+=(goal[k][c]-lm[k][c])*w;
+  const lean=0.12*w; for (const k of [0,7,8,11,12]) lm[k][0]+=lean;                     // 상체를 살짝 공 쪽으로
 }
 // 드리블 터치 동작: 공을 툭 차는 순간 한쪽 발을 공 쪽으로 내밀었다가 원래 걸음으로 돌아온다
 //   엉덩이는 그대로 두고, 무릎·발목은 두 관절 IK(허벅지·정강이 길이 고정)로 공 바로 뒤에 발이 오게 계산해서 섞는다
@@ -2331,7 +2383,7 @@ $("bMute").onclick=()=>{ muted=!muted; const b=$("bMute"); b.textContent=muted?"
 
 muted=true; resetState(); muted=false;                    // 타이틀 배경용 초기 배치(소리 없이)
 $("msg").hidden=true; setMode("login");                   // 로딩 화면 → 로그인 화면
-window.GAME={ S, CONFIG, SAVE, AUTH, season, seasonRecord, simScore, rankOrder, ball, HL, HW, airReachable, execAirKick, BALL_HOOKS, predictFlight, flightNear, ballHits, bodyParts, get players(){ return players; }, update, press, release, render, proj, updatePose, poseProcedural, renderer, scene, camera, cam,
+window.GAME={ S, CONFIG, tryPoke, pokeTick, SAVE, AUTH, season, seasonRecord, simScore, rankOrder, ball, HL, HW, airReachable, execAirKick, BALL_HOOKS, predictFlight, flightNear, ballHits, bodyParts, get players(){ return players; }, update, press, release, render, proj, updatePose, poseProcedural, renderer, scene, camera, cam,
   LM, POSE_CONNECTIONS, POSE_CLIPS, loadPoseClip, fromMediaPipe, togglePose };   // 포즈 데이터 연결용
 requestAnimationFrame(t=>{ last=t; requestAnimationFrame(frame); });
 })();
