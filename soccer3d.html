@@ -690,6 +690,7 @@ const CONFIG = {
   cross:  { min: 28, max: 96, angle: 38, assist: 35 },                   // 비거리, 발사각(도), 조준 보정각(도)
   ball:   { g: 9.8, bounce: 0.55, roll: 0.5, rollFlat: 1.2, air: 0.12 },
   tackle: { user: 3.0, cpu: 1.2, slideSpeed: 9, slideTime: 0.55 },       // 초당 공 뺏기 확률(상대 팀만 씀. 우리 팀은 발 뻗기 접촉으로만 뺏음)
+  body:   { radius: 0.2, ownerStrength: 0.55, block: 0.8, ownerSlow: 0.35, loseTime: 0.7, recover: 1.5, spill: 2.8 },   // 몸싸움: 몸통 반지름(키 배율), 공 가진 선수 힘(1보다 작으면 더 밀림), 붙어서 이 시간(초) 밀리면 공을 흘림
   poke:   { range: 1.5, time: 0.34, hitFrom: 0.07, hitTo: 0.24, slack: 0.06, push: 4.5, cool: 0.45, mateCool: 0.9 },   // 발 뻗어 뺏기: 공까지 거리(m) 안이면 뻗음, 동작 시간, 발 판정이 켜지는 구간, 발 판정 여유, 공이 튕겨 나가는 속도
   gk:     { speed: 6.5, dive: 6.0, reach: 1.1, reactMin: 0.17, reactMax: 0.33, catch: 0.6, hold: 1.1, userHold: 8, carry: 4, punt: [28, 62] },   // userHold: 내 골키퍼가 공을 들고 있을 수 있는 시간, carry: 들고 걷는 속도, punt: 슛 버튼 롱킥 거리
   cpu:    { think: 0.3, shootRange: 20, passUrge: 0.1, shotError: 0.15 },
@@ -1766,6 +1767,44 @@ function stepPlayers(dt){
       if (hyp(p.vx,p.vz)<0.6 && o!==p) p.a=Math.atan2(ball.z-p.z,ball.x-p.x);
     }
   }
+  bodyClash(dt);
+}
+/* ===== 몸싸움: 선수끼리 몸을 통과하지 않고 밀어냄 =====
+   몸통 위치는 포즈 관절(골반·어깨 가운데, 몸이 기울면 같이 움직임)로 잡고, 둘의 몸통 원이 겹친 만큼 서로 밀어낸다.
+   공을 가진 선수는 힘이 약해서(CONFIG.body.ownerStrength) 더 많이 밀리고 느려지며, 붙어서 계속 밀리면 공을 흘린다 */
+function torsoXZ(p){
+  const J=p.jw; if (!J) return [p.x,p.z];
+  return [(J[11].x+J[12].x+J[23].x+J[24].x)/4, (J[11].z+J[12].z+J[23].z+J[24].z)/4];
+}
+function bodyClash(dt){
+  const B=CONFIG.body, K=CONFIG.size.player, R=B.radius*K*2, o=ball.owner;
+  const T=players.map(torsoXZ);
+  const contact=new Set();
+  for (let it=0;it<2;it++) for (let i=0;i<players.length;i++) for (let j=i+1;j<players.length;j++){        // 여럿이 붙어 있어도 풀리게 두 번
+    const a=players[i], b=players[j];
+    if (a.slideT>0||b.slideT>0) continue;                               // 슬라이딩은 따로(태클)
+    let dx=T[j][0]-T[i][0], dz=T[j][1]-T[i][1], d=Math.hypot(dx,dz);
+    if (d>=R) continue;
+    if (d<1e-4){ dx=1; dz=0; d=1e-4; } dx/=d; dz/=d;
+    const over=R-d, sa=(a===o?B.ownerStrength:1)*(a.gk&&o===a?3:1), sb=(b===o?B.ownerStrength:1)*(b.gk&&o===b?3:1);
+    const ma=sb/(sa+sb), mb=sa/(sa+sb);                                 // 힘이 약한 쪽이 더 많이 밀림
+    a.x-=dx*over*ma; a.z-=dz*over*ma; b.x+=dx*over*mb; b.z+=dz*over*mb;
+    T[i][0]-=dx*over*ma; T[i][1]-=dz*over*ma; T[j][0]+=dx*over*mb; T[j][1]+=dz*over*mb;
+    for (const [p,q,s] of [[a,b,-1],[b,a,1]]){                           // 서로를 향하는 속도는 줄임(벽처럼 막힘)
+      const vn=(p.vx*dx+p.vz*dz)*s; if (vn>0){ p.vx-=dx*vn*s*B.block; p.vz-=dz*vn*s*B.block; }
+    }
+    if (it===0 && o && !o.gk && (a===o||b===o)){ const q=a===o?b:a; if (q.team!==o.team){ contact.add(q); o.vx*=1-B.ownerSlow*dt*10; o.vz*=1-B.ownerSlow*dt*10; } }
+  }
+  if (o && !o.gk){
+    if (contact.size){ o.shoveT=(o.shoveT||0)+dt*contact.size; }
+    else o.shoveT=Math.max(0,(o.shoveT||0)-dt*B.recover);
+    if (o.shoveT>B.loseTime){                                            // 계속 밀려서 공을 흘림: 공은 미는 선수 쪽으로 굴러감
+      const q=[...contact][0]; let dx=q.x-ball.x, dz=q.z-ball.z; const dl=hyp(dx,dz)||1;
+      ball.owner=null; ball.vx=dx/dl*B.spill+o.vx*0.3; ball.vz=dz/dl*B.spill+o.vz*0.3; ball.vy=0.3; ball.last=q.team;
+      o.cool=0.5; o.stun=0.2; o.shoveT=0; S.poss=-1; sfx.kick(0.15);
+      if (q===S.ctrl) say("몸싸움 승리!",0.7);
+    }
+  }
 }
 
 /* ===== 메인 업데이트 ===== */
@@ -2383,7 +2422,7 @@ $("bMute").onclick=()=>{ muted=!muted; const b=$("bMute"); b.textContent=muted?"
 
 muted=true; resetState(); muted=false;                    // 타이틀 배경용 초기 배치(소리 없이)
 $("msg").hidden=true; setMode("login");                   // 로딩 화면 → 로그인 화면
-window.GAME={ S, CONFIG, tryPoke, pokeTick, SAVE, AUTH, season, seasonRecord, simScore, rankOrder, ball, HL, HW, airReachable, execAirKick, BALL_HOOKS, predictFlight, flightNear, ballHits, bodyParts, get players(){ return players; }, update, press, release, render, proj, updatePose, poseProcedural, renderer, scene, camera, cam,
+window.GAME={ S, CONFIG, bodyClash, tryPoke, pokeTick, SAVE, AUTH, season, seasonRecord, simScore, rankOrder, ball, HL, HW, airReachable, execAirKick, BALL_HOOKS, predictFlight, flightNear, ballHits, bodyParts, get players(){ return players; }, update, press, release, render, proj, updatePose, poseProcedural, renderer, scene, camera, cam,
   LM, POSE_CONNECTIONS, POSE_CLIPS, loadPoseClip, fromMediaPipe, togglePose };   // 포즈 데이터 연결용
 requestAnimationFrame(t=>{ last=t; requestAnimationFrame(frame); });
 })();
