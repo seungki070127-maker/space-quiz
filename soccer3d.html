@@ -691,7 +691,7 @@ const CONFIG = {
   ball:   { g: 9.8, bounce: 0.55, roll: 0.5, rollFlat: 1.2, air: 0.12 },
   tackle: { user: 3.0, cpu: 1.2, slideSpeed: 9, slideTime: 0.55 },       // 초당 공 뺏기 확률(상대 팀만 씀. 우리 팀은 발 뻗기 접촉으로만 뺏음)
   body:   { radius: 0.2, ownerStrength: 0.55, block: 0.8, ownerSlow: 0.35, loseTime: 0.7, recover: 1.5, spill: 2.8 },   // 몸싸움: 몸통 반지름(키 배율), 공 가진 선수 힘(1보다 작으면 더 밀림), 붙어서 이 시간(초) 밀리면 공을 흘림
-  poke:   { range: 3.0, reach: 1.15, time: 0.34, hitFrom: 0.07, hitTo: 0.24, slack: 0.06, push: 4.5, cool: 0.45, mateCool: 0.9 },   // 발 뻗어 뺏기: 공까지 거리(m) 안이면 뻗음, 동작 시간, 발 판정이 켜지는 구간, 발 판정 여유, 공이 튕겨 나가는 속도
+  poke:   { range: 2.25, reach: 1.15, time: 0.34, hitFrom: 0.07, hitTo: 0.24, slack: 0.06, push: 4.5, cool: 0.45, mateCool: 0.9 },   // 발 뻗어 뺏기: 공까지 거리(m) 안이면 뻗음, 동작 시간, 발 판정이 켜지는 구간, 발 판정 여유, 공이 튕겨 나가는 속도
   gk:     { speed: 6.5, dive: 6.0, reach: 1.1, reactMin: 0.17, reactMax: 0.33, catch: 0.6, hold: 1.1, userHold: 8, carry: 4, punt: [28, 62] },   // userHold: 내 골키퍼가 공을 들고 있을 수 있는 시간, carry: 들고 걷는 속도, punt: 슛 버튼 롱킥 거리
   cpu:    { pokeCool: 0.55, pressRange: 14, slideChance: 0.6, think: 0.3, shootRange: 20, passUrge: 0.1, shotError: 0.15 },
   cam:    { h: 20.4, back: 40.1, pitch: 27, zoom: 0.9, follow: 2.6, yaw: 0, lead: 0.3, aim: 7, ahead: 6 },   // 높이, 뒤로 거리, 내려보는 각(도), 확대(클수록 망원), 따라가는 속도, 골대 쪽으로 도는 각(도, 0 = 안 돎), 공 진행방향 미리보기(초), aim: 공보다 이만큼(m) 카메라 쪽을 화면 중앙에, ahead: 내 팀이 공격하는 방향으로 이만큼(m) 앞을 보여 줌
