@@ -784,12 +784,21 @@ function press(type){
   if (S.mode!=="playing" || S.freeze>0 || S.dead) return;
   // 공을 기다리는 중(예약) 같은 버튼을 다시 누르면 저장된 세기부터 이어서 충전, 다른 버튼이면 처음(0)부터
   const cont=!!S.air && S.air.type===type && !ball.owner;
+  if (ball.owner && ball.owner.team!==S.ctrl.team){          // 상대가 공을 가짐: 누르는 순간 바로 수비 동작(얼마나 길게 누르든 상관없음)
+    S.charge={ type, t:0, own:false, done:true }; defend(type); return;
+  }
   S.charge={ type, t: cont ? S.air.power*CONFIG.charge.time : 0, own: ball.owner===S.ctrl, cont };
+}
+function defend(type){
+  const c=S.ctrl;
+  if (type==="cross") switchPlayer();                      // 크로스 버튼: 선수 전환
+  else if (type==="shoot") slide(c);                       // 슛 버튼: 태클
+  else { S.press=CONFIG.charge.pressTime; tryPoke(c); }    // 패스 버튼: 압박(발 뻗어 뺏기)
 }
 // 공을 가졌으면 항상 킥. 공이 없을 때(뺏김·공중볼): 짧게 누르면 전환/태클/압박, 길게 누르면 패스/슛/크로스 충전
 function release(type){
   const ch=S.charge; if (!ch || ch.type!==type) return;
-  S.charge=null;
+  S.charge=null; if (ch.done) return;                      // 이미 누르는 순간 처리함
   if (S.mode!=="playing" || S.dead) return;
   const c=S.ctrl, power=clamp(ch.t/CONFIG.charge.time, CONFIG.charge.min, 1);
   if (!ball.owner){                                        // 공이 누구 것도 아님: 닿으면 바로 차고, 아직 멀면(꾹 눌렀다 뗐을 때) 공이 올 때까지 기다렸다가 누른 세기로 찬다
@@ -798,10 +807,9 @@ function release(type){
     if (ch.t>CONFIG.charge.tap || ch.cont){ S.air={ type, power, until:S.time+CONFIG.airKick.hold }; return; }
   }
   if (ball.owner===c || (!ball.owner && c.cool<=0 && dist(c,ball)<1.5 && ball.y<2.3)) return userKick(c,type,power);
-  if (ch.own || ch.t>CONFIG.charge.tap) return;
-  if (type==="cross") switchPlayer();                      // 크로스 버튼 짧게: 선수 전환
-  else if (type==="shoot") slide(c);
-  else { S.press=CONFIG.charge.pressTime; tryPoke(c); }    // 패스 버튼 짧게: 압박(발 뻗어 뺏기)
+  if (ch.own) return;
+  if (ch.t>CONFIG.charge.tap && !(ball.owner && ball.owner.team!==c.team)) return;   // 누르는 사이 상대가 공을 잡았으면 길게 눌렀어도 수비 동작
+  defend(type);
 }
 /* ===== 발 뻗어 뺏기 (포즈 기반 접촉) =====
    압박을 누르면(또는 압박 중 공 가까이 가면) 공 쪽 발을 뻗는다. 뻗은 발·정강이 판정 상자(bodyParts)가 공에 실제로 닿을 때만 공이 튕겨 나간다 */
