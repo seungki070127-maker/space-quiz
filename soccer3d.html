@@ -691,6 +691,7 @@ const CONFIG = {
   ball:   { g: 9.8, bounce: 0.55, roll: 0.5, rollFlat: 1.2, air: 0.12 },
   tackle: { user: 3.0, cpu: 1.2, slideSpeed: 9, slideTime: 0.55 },       // 초당 공 뺏기 확률(상대 팀만 씀. 우리 팀은 발 뻗기 접촉으로만 뺏음)
   body:   { radius: 0.2, ownerStrength: 0.55, block: 0.8, ownerSlow: 0.35, loseTime: 0.7, recover: 1.5, spill: 2.8 },   // 몸싸움: 몸통 반지름(키 배율), 공 가진 선수 힘(1보다 작으면 더 밀림), 붙어서 이 시간(초) 밀리면 공을 흘림
+  throwIn: { dist: [4, 15], angle: 28, time: 0.42, keep: 2 },   // 스로인: 던지는 거리(경기장 100 기준, 세기 0%~100% — 패스 최대의 절반), 던지는 각도, 동작 시간, 상대가 떨어져 있는 거리(m)
   poke:   { range: 2.25, reach: 1.15, time: 0.34, hitFrom: 0.07, hitTo: 0.24, slack: 0.06, push: 4.5, cool: 0.45, mateCool: 0.9 },   // 발 뻗어 뺏기: 공까지 거리(m) 안이면 뻗음, 동작 시간, 발 판정이 켜지는 구간, 발 판정 여유, 공이 튕겨 나가는 속도
   gk:     { speed: 6.5, dive: 6.0, reach: 1.1, reactMin: 0.17, reactMax: 0.33, catch: 0.6, hold: 1.1, userHold: 8, carry: 4, punt: [28, 62] },   // userHold: 내 골키퍼가 공을 들고 있을 수 있는 시간, carry: 들고 걷는 속도, punt: 슛 버튼 롱킥 거리
   cpu:    { activeAbove: 4, pokeCool: 0.55, pressRange: 14, slideChance: 0.6, think: 0.3, shootRange: 20, passUrge: 0.1, shotError: 0.15 },
@@ -868,6 +869,14 @@ function passTo(p,m,v){
   const d=dist(p,m), t=d/v, tx=m.x+m.vx*t*0.8, tz=m.z+m.vz*t*0.8, dx=tx-p.x, dz=tz-p.z, n=hyp(dx,dz)||1;
   doKick(p, dx/n*v, 0, dz/n*v, v/CONFIG.pass.max); setRecv(p,m);
 }
+// 스로인 던지기: 머리 위 높이에서, 세기만큼의 거리(최대 패스의 절반)에 떨어지게
+function throwIn(p,ax,az,power){
+  const T=CONFIG.throwIn, d=(T.dist[0]+(T.dist[1]-T.dist[0])*power)*MS, a=T.angle*Math.PI/180, g=CONFIG.ball.g, h=Math.max(0,ball.y-BR);
+  const ca=Math.cos(a), sa=Math.sin(a), v=d*Math.sqrt(g/(2*ca*ca*(d*Math.tan(a)+h)))*1.06;   // 높이 h 에서 던져 거리 d 에 떨어지는 속도(공기 저항만큼 조금 더)
+  const m=pickMate(p,ax,az,d,30,2);
+  doKick(p,ax*v*ca,v*sa,az*v*ca,power); ballTouch(p,"hand"); p.kickT=0; p.throwT=T.time;
+  if (m) setRecv(p,m);
+}
 function crossTo(p,tx,tz,m){
   const dx=tx-p.x, dz=tz-p.z, d=Math.max(6,hyp(dx,dz)), a=CONFIG.cross.angle*Math.PI/180;
   const v=Math.sqrt(d*CONFIG.ball.g/Math.sin(2*a))*1.06;
@@ -893,6 +902,7 @@ function pickMate(p,ax,az,want,maxDeg,minD){
 }
 function userKick(p,type,power){
   const iv=inputVec(), aimed=iv.m>0.3;
+  if (S.fk && S.fk.throw && S.fk.p===p) return throwIn(p,Math.cos(p.a),Math.sin(p.a),power);   // 스로인: 어느 버튼이든 던지기(방향은 키커가 보는 쪽)
   const ax=aimed?iv.x/iv.m:Math.cos(p.a), az=aimed?iv.z/iv.m:Math.sin(p.a);
   if (type==="pass"){
     const c=CONFIG.pass, D=(c.dist[0]+(c.dist[1]-c.dist[0])*power)*MS;   // 세기만큼의 거리(최대 경기장 100 기준 30)
@@ -986,6 +996,8 @@ function stepBallCore(dt){
     const k=Math.min(1,dt*18);
     ball.x+=(o.x+Math.cos(o.a)*0.3-ball.x)*k; ball.z+=(o.z+Math.sin(o.a)*0.3-ball.z)*k;
     ball.y=1.05*CONFIG.size.player; ball.vx=o.vx; ball.vz=o.vz; ball.vy=0;
+  } else if (o && S.fk && S.fk.p===o && S.fk.throw){       // 스로인: 공을 두 손으로 머리 위(조금 뒤)에 들고 있음
+    const K=CONFIG.size.player; ball.x=o.x-Math.cos(o.a)*0.1*K; ball.z=o.z-Math.sin(o.a)*0.1*K; ball.y=1.95*K-ballLift(); ball.vx=ball.vy=ball.vz=0;
   } else if (o && S.fk && S.fk.p===o){                     // 세트피스(코너킥): 공은 제자리에 가만히
     ball.x=S.fk.x; ball.z=S.fk.z; ball.y=BR; ball.vx=ball.vy=ball.vz=0;
   } else if (o){                                            // 드리블: 발 주변 원(반지름 = 선수 키 × radius) 안에서만 공을 툭툭 차며 나아간다
@@ -1031,6 +1043,7 @@ function stepBallCore(dt){
   if (S.dead){                                            // 골 뒤: 그물 안에서 멈춤
     ball.vx*=0.9; ball.vz*=0.9; ball.x=clamp(ball.x,-HL-1.8,HL+1.8); return;
   }
+  if (S.fk && ball.owner===S.fk.p) return;                 // 세트피스 키커가 들고/놓고 있는 공은 선 밖이어도 나간 공이 아님
   if (Math.abs(ball.x)>HL){
     const side=Math.sign(ball.x);
     if (Math.abs(px)<=HL){
@@ -1157,6 +1170,10 @@ function setPiece(team,x,z,label,byGk){
     for (const q of players) if (q.team!==team){ const dx=q.x-x, dz=q.z-z, d=hyp(dx,dz)||1;
       if (d<8){ q.x=clamp(x+dx/d*8,-HL,HL); q.z=clamp(z+dz/d*8,-HW,HW); } }
     S.dead=false; setOwner(taker); S.freeze=0.5;
+    if (label==="스로인"){                                   // 스로인: 키커가 터치라인 밖에서 공을 머리 위로 들고, 팔로 던진다
+      const sg=Math.sign(z)||1, a=Math.atan2(-sg,0);
+      S.fk={ p:taker, x, z, a, throw:true, sg }; taker.a=a; taker.x=x; taker.z=sg*(HW+0.05); taker.think=rnd(0.9,1.6);
+    }
     if (label==="코너킥"){                                   // 코너킥: 공은 코너에 가만히, 키커는 공 뒤에 서서 한 번에 찬다(드리블 없음)
       const tx=Math.sign(x)*(HL-PSPOT*0.7), tz=0, a=Math.atan2(tz-z,tx-x);   // 기본 조준: 페널티 지점 앞
       S.fk={ p:taker, x, z, a }; taker.a=a; taker.x=x-Math.cos(a)*0.55; taker.z=z-Math.sin(a)*0.55;
@@ -1807,7 +1824,7 @@ function stepPlayers(dt){
   }
   const o=ball.owner;
   for (const p of players){
-    p.cool-=dt; p.kickT-=dt; p.think-=dt; if (p.headT>0) p.headT-=dt; if (p.pokeT>0){ p.pokeT-=dt;
+    p.cool-=dt; p.kickT-=dt; p.think-=dt; if (p.headT>0) p.headT-=dt; if (p.throwT>0) p.throwT-=dt; if (p.pokeT>0){ p.pokeT-=dt;
       if (p.lunge>0){ const st=Math.min(p.lunge,p.lunge/Math.max(dt,CONFIG.poke.hitTo-(S.time-p.pokeAt))*dt), dx=ball.x-p.x, dz=ball.z-p.z, dl=hyp(dx,dz)||1;   // 판정이 끝나기 전까지 남은 거리를 나눠서 다가감
         p.x+=dx/dl*st; p.z+=dz/dl*st; p.lunge-=st; } }
     if (p.slideT>0){
@@ -1816,7 +1833,15 @@ function stepPlayers(dt){
     }
     if (p.stun>0){ p.stun-=dt; steer(p,0,0,dt); continue; }
     if (S.fk && S.fk.p===p){                                // 코너킥 키커: 공 뒤에 서서 조이스틱으로 방향만 돌림
+      p.run=0;                                               // 서서 준비(달리는 다리 동작 없음)
       if (p===S.ctrl){ const iv=inputVec(); if (iv.m>0.3) S.fk.a=Math.atan2(iv.z,iv.x); }
+      if (S.fk.throw){                                       // 스로인: 경기장 안쪽만 볼 수 있음
+        const sg=S.fk.sg; let a=S.fk.a, ix=Math.cos(a), iz=Math.sin(a); if (iz*-sg<0.25){ iz=-sg*0.25; ix=Math.sign(ix||1)*Math.sqrt(1-0.0625); S.fk.a=a=Math.atan2(iz,ix); }
+        p.a=a; p.vx=p.vz=0; p.x=S.fk.x; p.z=sg*(HW+0.05);   // 발은 터치라인 위, 공은 라인 바로 안쪽 위
+        if (p.team===1 && p.think<=0){ const m=players.filter(q=>q.team===1&&!q.gk&&q!==p).sort((a,b)=>hyp(a.x-p.x,a.z-p.z)-hyp(b.x-p.x,b.z-p.z))[0];
+          if (m){ S.fk.a=Math.atan2(m.z-p.z,m.x-p.x); p.a=S.fk.a; } throwIn(p,Math.cos(p.a),Math.sin(p.a),m?clamp(hyp(m.x-p.x,m.z-p.z)/(CONFIG.throwIn.dist[1]*MS),0.1,1):0.5); }
+        continue;
+      }
       p.a=S.fk.a; p.vx=p.vz=0; p.x=S.fk.x-Math.cos(p.a)*0.55; p.z=S.fk.z-Math.sin(p.a)*0.55;
       if (p.team===1 && p.think<=0){ const m=players.filter(q=>q.team===1&&!q.gk&&q!==p).sort((a,b)=>hyp(a.x-HL*p.dir,a.z)-hyp(b.x-HL*p.dir,b.z))[0];
         crossTo(p, m?m.x:HL*p.dir-PSPOT*0.7*p.dir, m?m.z:0, m); }   // 상대 키커: 잠시 뒤 골문 앞 동료에게 크로스
@@ -1852,7 +1877,7 @@ function stepPlayers(dt){
   }
   bodyClash(dt);
   if (S.fk){ for (const q of players) if (q.team!==S.fk.p.team){ const dx=q.x-S.fk.x, dz=q.z-S.fk.z, d=hyp(dx,dz)||1, R=9.15*MS;   // 코너킥 동안 상대는 9.15m 밖
-    if (d<R){ q.x=S.fk.x+dx/d*R; q.z=S.fk.z+dz/d*R; } } }
+    if (S.fk.throw && d<CONFIG.throwIn.keep*MS){ const R2=CONFIG.throwIn.keep*MS; q.x=S.fk.x+dx/d*R2; q.z=S.fk.z+dz/d*R2; } else if (!S.fk.throw && d<R){ q.x=S.fk.x+dx/d*R; q.z=S.fk.z+dz/d*R; } } }
 }
 /* ===== 몸싸움: 선수끼리 몸을 통과하지 않고 밀어냄 =====
    몸통 위치는 포즈 관절(골반·어깨 가운데, 몸이 기울면 같이 움직임)로 잡고, 둘의 몸통 원이 겹친 만큼 서로 밀어낸다.
@@ -2097,7 +2122,21 @@ function updatePose(p){
   if (cIdle) samplePose(cIdle,(S.time+p.i*0.37)*cIdle.fps/cIdle.frames.length,tmpB); else { const r=p.run; p.run=0; poseProcedural(p,tmpB); p.run=r; }
   const w=sm(run*CONFIG.pose.blend);
   for (let k=0;k<33;k++) for (let c=0;c<3;c++) lm[k][c]=tmpB[k][c]+(tmpA[k][c]-tmpB[k][c])*w;
-  touchPose(p,lm); pokePose(p,lm);
+  touchPose(p,lm); pokePose(p,lm); throwPose(p,lm);
+}
+// 스로인 동작: 두 손으로 공을 머리 위(조금 뒤)로 들고 있다가, 던질 때 팔을 머리 위로 앞으로 휘둘러 놓는다
+function throwPose(p,lm){
+  const hold=S.fk && S.fk.throw && S.fk.p===p && ball.owner===p, T=CONFIG.throwIn.time, tt=p.throwT>0?1-p.throwT/T:-1;
+  if (!hold && tt<0) return;
+  const sw= hold ? 0 : sm(Math.min(1,tt/0.45)), back= hold ? 1 : 1-sm((tt-0.55)/0.45);   // sw: 앞으로 휘두름, back: 끝나고 원래 팔로 돌아옴
+  for (const R of [0,1]){
+    const S_=lm[LM.L_SHOULDER+R], sgn=R?1:-1;
+    const el=[S_[0]+mix(-0.10,0.22,sw), S_[1]+mix(0.24,0.16,sw), S_[2]+sgn*0.06];
+    const wr=[S_[0]+mix(-0.14,0.48,sw), S_[1]+mix(0.46,0.12,sw), S_[2]+sgn*mix(-0.06,0.02,sw)];   // 공을 잡은 손은 머리 위 가운데로
+    const goal={ [LM.L_ELBOW+R]:el, [LM.L_WRIST+R]:wr, [LM.L_PINKY+R]:[wr[0]+0.03,wr[1]+0.06,wr[2]], [LM.L_INDEX+R]:[wr[0]+0.05,wr[1]+0.07,wr[2]-sgn*0.02], [LM.L_THUMB+R]:[wr[0]+0.02,wr[1]+0.05,wr[2]-sgn*0.03] };
+    for (const k in goal) for (let c=0;c<3;c++) lm[k][c]+=(goal[k][c]-lm[k][c])*back;
+  }
+  if (!hold){ const lean=0.10*Math.sin(Math.min(1,tt/0.6)*Math.PI)*back; for (const k of [0,7,8,11,12]) lm[k][0]+=lean; }   // 던질 때 상체가 앞으로
 }
 // 발 뻗어 뺏기 동작: 공 쪽 발을 공이 있는 자리까지 쭉 뻗었다가(두 관절 IK) 돌아온다. 공을 따라 목표를 매 화면 다시 잡는다
 function pokePose(p,lm){
