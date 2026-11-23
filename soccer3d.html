@@ -685,7 +685,7 @@ const CONFIG = {
   autoSwitch: { every: 0.12, margin: 1.5 },   // 패스 중 자동 선수 전환: 검사 주기(초), 이만큼(m) 더 가까워야 전환
   player: { speed: 10.5, dribble: 0.9, accel: 7, cpuSpeed: 0.93, control: 1.35, controlHeight: 1.6 },   // control: 이 거리 안에 공이 오면 받는다, controlHeight: 이 높이 아래의 공만
   charge: { time: 0.9, min: 0.1, tap: 0.2, pressTime: 1.5 },   // 100%까지 걸리는 시간, 이보다 짧으면 '한 번 누름', 압박 지속 시간
-  pass:   { min: 18, max: 31, dist: [8, 30], angle: 60, glideFrom: 0.7, glideAt: 0.9, glideFlat: 1.0, endDecel: 45 },   // CPU 패스 속도(min~max), dist: 내 패스 거리(경기장 100 기준, 세기 0%~100%), glideFrom 이상 세기면 쭉 가다가 glideAt 지점부터 서서히 멈춤
+  pass:   { min: 18, max: 31, dist: [8, 30], speed: [17, 27], angle: 60, glideFrom: 0.7, glideAt: 0.9, endDecel: 45 },   // speed: 내 패스 처음 속도(세기 0%~100%, 세기에 따라 조금씩 빨라짐)   // CPU 패스 속도(min~max), dist: 내 패스 거리(경기장 100 기준, 세기 0%~100%), glideFrom 이상 세기면 쭉 가다가 glideAt 지점부터 서서히 멈춤
   shot:   { min: 34, max: 64, liftBase: 1.5, liftPow: 5.5, error: 0.03, errorPow: 0.07, aimWidth: 4.2 },
   cross:  { dist: [9, 30], angle: 38, assist: 35, bounce: [0.32, 0.62], keep: 0.84, stopVy: 1.0 },   // bounce: 아무도 못 받고 떨어졌을 때 튀는 정도(세기 0%~100%), keep: 튈 때마다 남는 앞쪽 속도                       // 비거리(경기장 100 기준, 세기 0%~100%), 발사각(도), 조준 보정각(도)
   ball:   { g: 9.8, bounce: 0.55, roll: 0.5, rollFlat: 1.2, air: 0.12 },
@@ -889,10 +889,12 @@ function userKick(p,type,power){
   if (type==="pass"){
     const c=CONFIG.pass, D=(c.dist[0]+(c.dist[1]-c.dist[0])*power)*MS;   // 세기만큼의 거리(최대 경기장 100 기준 30)
     const m=pickMate(p,ax,az,D,c.angle,3);
+    const v=c.speed[0]+(c.speed[1]-c.speed[0])*power;         // 처음 속도: 세기가 셀수록 조금씩 빠름
+    doKick(p,ax*v,0,az*v,power);
     if (power>=c.glideFrom){                                 // 강한 패스: 거의 같은 속도로 쭉 가다가 목표의 90%부터 서서히 멈춤
-      const v90=Math.sqrt(2*(1-c.glideAt)*D*c.endDecel), v=Math.sqrt(v90*v90+2*c.glideFlat*c.glideAt*D);
-      doKick(p,ax*v,0,az*v,power); ball.glide={ ox:ball.x, oz:ball.z, dx:ax, dz:az, D, a:null };
-    } else { const v=rollSpeedFor(D); doKick(p,ax*v,0,az*v,power); }   // 약한 패스: 보통 공처럼 굴러가 목표 거리에서 멈춤
+      const v90=Math.min(v,Math.sqrt(2*(1-c.glideAt)*D*c.endDecel)), flat=Math.max(0,(v*v-v90*v90)/(2*c.glideAt*D));
+      ball.glide={ ox:ball.x, oz:ball.z, dx:ax, dz:az, D, a:null, flat };
+    } else ball.glide={ ox:ball.x, oz:ball.z, dx:ax, dz:az, D, k:rollDistFor(v)/D };   // 약한 패스: 보통 공처럼 점점 느려지되, 목표 거리에서 멈추게 마찰을 맞춤
     if (m) setRecv(p,m);                                   // 조준한 방향 그대로 찬다. 그 방향의 동료는 받으러 감
   } else if (type==="shoot" && p.gk){                      // 골키퍼의 슛 버튼 = 롱킥
     const [a,b]=CONFIG.gk.punt, d=a+(b-a)*power, m=pickMate(p,ax,az,d,25,20);
@@ -1049,8 +1051,9 @@ function rollStep(b,g,v,dt){
   if (g){
     const al=(b.vx*g.dx+b.vz*g.dz)/(v||1);
     if (al>0.97 && b.y<BR+0.05){                             // 방향이 바뀌거나(맞고 튕김) 뜨면 보통 공으로
+      if (g.k) return Math.max(0, v-(c.roll*v+c.rollFlat)*g.k*dt);
       const tr=(b.x-g.ox)*g.dx+(b.z-g.oz)*g.dz;
-      if (tr<g.D*P.glideAt) return Math.max(0,v-P.glideFlat*dt);
+      if (tr<g.D*P.glideAt) return Math.max(0,v-g.flat*dt);
       if (g.a===null) g.a=v*v/(2*Math.max(0.3,g.D-tr));
       return Math.max(0,v-g.a*dt);
     }
@@ -1058,8 +1061,9 @@ function rollStep(b,g,v,dt){
   }
   return Math.max(0, v-(c.roll*v+c.rollFlat)*dt);
 }
+const rollDistFor=v=>{ const c=CONFIG.ball; return (v-(c.rollFlat/c.roll)*Math.log(1+c.roll*v/c.rollFlat))/c.roll; };   // 보통 마찰로 굴러가는 거리
 function rollSpeedFor(D){                                  // 보통 마찰로 굴러서 D m 에서 멈추는 처음 속도
-  const c=CONFIG.ball, dist=v=>(v-(c.rollFlat/c.roll)*Math.log(1+c.roll*v/c.rollFlat))/c.roll;
+  const dist=rollDistFor;
   let lo=0, hi=120; for (let i=0;i<40;i++){ const m=(lo+hi)/2; if (dist(m)<D) lo=m; else hi=m; } return lo;
 }
 function ballReset(){
