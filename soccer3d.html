@@ -615,9 +615,9 @@ addEventListener("load",()=>{
     <p>레드 팀을 조작해 블루 팀을 이기세요. 버튼을 길게 누를수록 강하게 찹니다.</p>
     <dl>
       <dt>이동</dt><dd>화면 왼쪽 드래그 · WASD / 방향키</dd>
-      <dt>패스</dt><dd>패스 버튼 · J (공 없을 때 짧게: 선수 전환)</dd>
+      <dt>패스</dt><dd>패스 버튼 · J (공 없을 때 짧게: 압박)</dd>
       <dt>슛</dt><dd>슛 버튼 · K (공 없을 때 짧게: 태클)</dd>
-      <dt>크로스</dt><dd>크로스 버튼 · L (공 없을 때 짧게: 압박)</dd>
+      <dt>크로스</dt><dd>크로스 버튼 · L (공 없을 때 짧게: 선수 전환)</dd>
       <dt>일시정지</dt><dd>P / Esc</dd>
       <dt>관절 보기</dt><dd>🦴 버튼 · O</dd>
     </dl>
@@ -799,9 +799,9 @@ function release(type){
   }
   if (ball.owner===c || (!ball.owner && c.cool<=0 && dist(c,ball)<1.5 && ball.y<2.3)) return userKick(c,type,power);
   if (ch.own || ch.t>CONFIG.charge.tap) return;
-  if (type==="pass") switchPlayer();
+  if (type==="cross") switchPlayer();                      // 크로스 버튼 짧게: 선수 전환
   else if (type==="shoot") slide(c);
-  else { S.press=CONFIG.charge.pressTime; tryPoke(c); }
+  else { S.press=CONFIG.charge.pressTime; tryPoke(c); }    // 패스 버튼 짧게: 압박(발 뻗어 뺏기)
 }
 /* ===== 발 뻗어 뺏기 (포즈 기반 접촉) =====
    압박을 누르면(또는 압박 중 공 가까이 가면) 공 쪽 발을 뻗는다. 뻗은 발·정강이 판정 상자(bodyParts)가 공에 실제로 닿을 때만 공이 튕겨 나간다 */
@@ -1847,7 +1847,7 @@ function syncHud(){
   const key=`${S.score}|${min}|${def}`;
   if (key===hudKey) return; hudKey=key;
   $("score").textContent=`${S.score[0]} - ${S.score[1]}`; $("clock").textContent=`${min}'`;
-  $("bPass").textContent=def?"전환":"패스"; $("bShoot").textContent=def?"태클":"슛"; $("bCross").textContent=def?"압박":"크로스";
+  $("bPass").textContent=def?"압박":"패스"; $("bShoot").textContent=def?"태클":"슛"; $("bCross").textContent=def?"전환":"크로스";
 }
 function say(text,dur){ const m=$("msg"); m.textContent=text; m.hidden=false; S.msgT=dur; }
 function setMode(m){
