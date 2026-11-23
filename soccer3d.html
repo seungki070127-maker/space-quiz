@@ -685,9 +685,9 @@ const CONFIG = {
   autoSwitch: { every: 0.12, margin: 1.5 },   // 패스 중 자동 선수 전환: 검사 주기(초), 이만큼(m) 더 가까워야 전환
   player: { speed: 10.5, dribble: 0.9, accel: 7, cpuSpeed: 0.93, control: 1.35, controlHeight: 1.6 },   // control: 이 거리 안에 공이 오면 받는다, controlHeight: 이 높이 아래의 공만
   charge: { time: 0.9, min: 0.1, tap: 0.2, pressTime: 1.5 },   // 100%까지 걸리는 시간, 이보다 짧으면 '한 번 누름', 압박 지속 시간
-  pass:   { min: 18, max: 50, wantMin: 8, wantMax: 38, angle: 60 },      // 땅볼 패스 속도, 강도별 목표 거리
+  pass:   { min: 18, max: 31, dist: [8, 30], angle: 60, glideFrom: 0.7, glideAt: 0.9, glideFlat: 1.0, endDecel: 45 },   // CPU 패스 속도(min~max), dist: 내 패스 거리(경기장 100 기준, 세기 0%~100%), glideFrom 이상 세기면 쭉 가다가 glideAt 지점부터 서서히 멈춤
   shot:   { min: 34, max: 64, liftBase: 1.5, liftPow: 5.5, error: 0.03, errorPow: 0.07, aimWidth: 4.2 },
-  cross:  { min: 28, max: 96, angle: 38, assist: 35 },                   // 비거리, 발사각(도), 조준 보정각(도)
+  cross:  { dist: [9, 30], angle: 38, assist: 35 },                       // 비거리(경기장 100 기준, 세기 0%~100%), 발사각(도), 조준 보정각(도)
   ball:   { g: 9.8, bounce: 0.55, roll: 0.5, rollFlat: 1.2, air: 0.12 },
   tackle: { user: 3.0, cpu: 1.2, slideSpeed: 9, slideTime: 0.55 },       // 초당 공 뺏기 확률(상대 팀만 씀. 우리 팀은 발 뻗기 접촉으로만 뺏음)
   body:   { radius: 0.2, ownerStrength: 0.55, block: 0.8, ownerSlow: 0.35, loseTime: 0.7, recover: 1.5, spill: 2.8 },   // 몸싸움: 몸통 반지름(키 배율), 공 가진 선수 힘(1보다 작으면 더 밀림), 붙어서 이 시간(초) 밀리면 공을 흘림
@@ -850,7 +850,7 @@ function slide(p,dir){
 /* ===== 킥 ===== */
 function doKick(p,vx,vy,vz,power){
   if (ball.owner===p && (p.gk || dist(p,ball)>1.8*CONFIG.size.player)){ ball.x=p.x+Math.cos(p.a)*0.6; ball.z=p.z+Math.sin(p.a)*0.6; ball.y=p.gk?0.4:BR; }   // 드리블 중엔 공이 있는 자리에서 그대로 찬다
-  ball.owner=null; ball.vx=vx; ball.vy=vy; ball.vz=vz; ball.last=p.team; ballTouch(p,p.gk&&ball.y>0.3?"hand":"foot");
+  ball.owner=null; ball.glide=null; ball.vx=vx; ball.vy=vy; ball.vz=vz; ball.last=p.team; ballTouch(p,p.gk&&ball.y>0.3?"hand":"foot");
   if (p.gk && S.ctrl===p) switchPlayer();
   p.cool=0.45; p.kickT=0.28; p.a=Math.atan2(vz,vx); p.hold=0; p.volleyLift=0;
   sfx.kick(power??0.5);
@@ -863,7 +863,7 @@ function passTo(p,m,v){
 function crossTo(p,tx,tz,m){
   const dx=tx-p.x, dz=tz-p.z, d=Math.max(6,hyp(dx,dz)), a=CONFIG.cross.angle*Math.PI/180;
   const v=Math.sqrt(d*CONFIG.ball.g/Math.sin(2*a))*1.06;
-  doKick(p, dx/d*v*Math.cos(a), v*Math.sin(a), dz/d*v*Math.cos(a), d/CONFIG.cross.max);
+  doKick(p, dx/d*v*Math.cos(a), v*Math.sin(a), dz/d*v*Math.cos(a), Math.min(1,d/(CONFIG.cross.dist[1]*MS)));
   if (m) setRecv(p,m);
 }
 function shootAt(p,tz,power,err){
@@ -885,9 +885,13 @@ function userKick(p,type,power){
   const iv=inputVec(), aimed=iv.m>0.3;
   const ax=aimed?iv.x/iv.m:Math.cos(p.a), az=aimed?iv.z/iv.m:Math.sin(p.a);
   if (type==="pass"){
-    const c=CONFIG.pass, v=c.min+(c.max-c.min)*power;
-    const m=pickMate(p,ax,az,c.wantMin+(c.wantMax-c.wantMin)*power,c.angle,3);
-    doKick(p,ax*v,0,az*v,power); if (m) setRecv(p,m);      // 조준한 방향 그대로 찬다. 그 방향의 동료는 받으러 감
+    const c=CONFIG.pass, D=(c.dist[0]+(c.dist[1]-c.dist[0])*power)*MS;   // 세기만큼의 거리(최대 경기장 100 기준 30)
+    const m=pickMate(p,ax,az,D,c.angle,3);
+    if (power>=c.glideFrom){                                 // 강한 패스: 거의 같은 속도로 쭉 가다가 목표의 90%부터 서서히 멈춤
+      const v90=Math.sqrt(2*(1-c.glideAt)*D*c.endDecel), v=Math.sqrt(v90*v90+2*c.glideFlat*c.glideAt*D);
+      doKick(p,ax*v,0,az*v,power); ball.glide={ ox:ball.x, oz:ball.z, dx:ax, dz:az, D, a:null };
+    } else { const v=rollSpeedFor(D); doKick(p,ax*v,0,az*v,power); }   // 약한 패스: 보통 공처럼 굴러가 목표 거리에서 멈춤
+    if (m) setRecv(p,m);                                   // 조준한 방향 그대로 찬다. 그 방향의 동료는 받으러 감
   } else if (type==="shoot" && p.gk){                      // 골키퍼의 슛 버튼 = 롱킥
     const [a,b]=CONFIG.gk.punt, d=a+(b-a)*power, m=pickMate(p,ax,az,d,25,20);
     crossTo(p,p.x+ax*d,p.z+az*d,m);                        // 조준한 방향으로, 세기만큼의 거리에 떨어지게
@@ -901,7 +905,7 @@ function userKick(p,type,power){
       shootAt(p,tz,power,c.error+c.errorPow*power);
     }
   } else {
-    const c=CONFIG.cross, d=c.min+(c.max-c.min)*power;
+    const c=CONFIG.cross, d=(c.dist[0]+(c.dist[1]-c.dist[0])*power)*MS;   // 최대 경기장 100 기준 30
     const m=pickMate(p,ax,az,d,c.assist,10);
     crossTo(p,p.x+ax*d,p.z+az*d,m);                        // 조준한 방향으로, 세기만큼의 거리에 떨어지게(그 방향의 동료는 받으러 감)
   }
@@ -909,7 +913,7 @@ function userKick(p,type,power){
 
 /* ===== 소유 ===== */
 function setOwner(p){
-  ball.owner=p; ball.last=p.team; S.poss=p.team; ballTouch(p,p.gk?"hand":"foot");
+  ball.owner=p; ball.glide=null; ball.last=p.team; S.poss=p.team; ballTouch(p,p.gk?"hand":"foot");
   if (S.side!==p.team){ S.side=p.team; S.press=0; } S.recv[0]=S.recv[1]=null;
   if (p.team===0) S.ctrl=p;                               // 내 골키퍼가 잡으면 골키퍼를 직접 조작
   if (p.gk) p.hold=p.team===0?CONFIG.gk.userHold:CONFIG.gk.hold;
@@ -994,7 +998,7 @@ function stepBallCore(dt){
     const sp=hyp(ball.vx,ball.vz);
     if (ball.y<=BR){
       ball.y=BR; ball.vy = ball.vy<-1.5 ? -ball.vy*c.bounce : 0;
-      if (sp>0){ const ns=Math.max(0, sp-(c.roll*sp+c.rollFlat)*dt); ball.vx*=ns/sp; ball.vz*=ns/sp; }
+      if (sp>0){ const ns=rollStep(ball,ball.glide,sp,dt); ball.vx*=ns/sp; ball.vz*=ns/sp; }
     } else { const k=Math.exp(-c.air*dt); ball.vx*=k; ball.vz*=k; }
     ball.spin+=sp*dt*4;
   }
@@ -1029,6 +1033,25 @@ function stepBallCore(dt){
 const BALL_HOOKS=[];
 function ballRadius(){ return BR*CONFIG.size.ball*1.15*CONFIG.ballBody.hitScale; }
 const ballLift=()=>BR*CONFIG.size.ball*1.15-BR;          // 화면의 공은 크게 그려서 땅에 닿게 이만큼 올려 그림 → 판정도 같은 중심을 씀
+// 굴러가는 공 속도 한 단계: 보통은 마찰(빠를수록 더 느려짐), 강한 패스(glide)는 목표의 90%까지 거의 그대로 가다가 남은 거리에서 고르게 멈춤
+function rollStep(b,g,v,dt){
+  const c=CONFIG.ball, P=CONFIG.pass;
+  if (g){
+    const al=(b.vx*g.dx+b.vz*g.dz)/(v||1);
+    if (al>0.97 && b.y<BR+0.05){                             // 방향이 바뀌거나(맞고 튕김) 뜨면 보통 공으로
+      const tr=(b.x-g.ox)*g.dx+(b.z-g.oz)*g.dz;
+      if (tr<g.D*P.glideAt) return Math.max(0,v-P.glideFlat*dt);
+      if (g.a===null) g.a=v*v/(2*Math.max(0.3,g.D-tr));
+      return Math.max(0,v-g.a*dt);
+    }
+    if (b===ball) ball.glide=null;
+  }
+  return Math.max(0, v-(c.roll*v+c.rollFlat)*dt);
+}
+function rollSpeedFor(D){                                  // 보통 마찰로 굴러서 D m 에서 멈추는 처음 속도
+  const c=CONFIG.ball, dist=v=>(v-(c.rollFlat/c.roll)*Math.log(1+c.roll*v/c.rollFlat))/c.roll;
+  let lo=0, hi=120; for (let i=0;i<40;i++){ const m=(lo+hi)/2; if (dist(m)<D) lo=m; else hi=m; } return lo;
+}
 function ballReset(){
   ball.r=ballRadius(); ball.px=ball.x; ball.py=ball.y; ball.pz=ball.z; ball.state=ball.owner?"owned":"ground";
   ball.w={x:0,y:0,z:0}; ball.touch=ball.touch||{ p:null, part:null, t:-1 };
@@ -1524,12 +1547,13 @@ function loginGuest(){ ensureGuest(); SAVE.account={ type:"guest" }; writeSave()
 function interceptPoint(p){
   if (ball.owner || ball.y>1.5) return chasePoint(p);
   const c=CONFIG.ball, sp=CONFIG.player.speed*(p.team?CONFIG.player.cpuSpeed:1), reach=CONFIG.player.control*0.7, DT=0.04;
-  let bx=ball.x, bz=ball.z, vx=ball.vx, vz=ball.vz;
-  for (let t=0;t<3.5;t+=DT){
-    if (hyp(bx-p.x,bz-p.z)-reach <= sp*Math.max(0,t-CONFIG.receive.react)) break;    // 이 시간 안에 닿을 수 있으면 여기서 받는다
-    const v=hyp(vx,vz); if (v<0.05) break;
-    const nv=Math.max(0,v-(c.roll*v+c.rollFlat)*DT); vx*=nv/v; vz*=nv/v; bx+=vx*DT; bz+=vz*DT;
+  const sim={ x:ball.x, z:ball.z, vx:ball.vx, vz:ball.vz, y:BR }, g=ball.glide?{...ball.glide}:null;
+  for (let t=0;t<4.5;t+=DT){
+    if (hyp(sim.x-p.x,sim.z-p.z)-reach <= sp*Math.max(0,t-CONFIG.receive.react)) break;    // 이 시간 안에 닿을 수 있으면 여기서 받는다
+    const v=hyp(sim.vx,sim.vz); if (v<0.05) break;
+    const nv=rollStep(sim,g,v,DT); sim.vx*=nv/v; sim.vz*=nv/v; sim.x+=sim.vx*DT; sim.z+=sim.vz*DT;   // 강한 패스(glide)도 같은 규칙으로
   }
+  const bx=sim.x, bz=sim.z;
   return [clamp(bx,-HL-1,HL+1), clamp(bz,-HW-1,HW+1)];
 }
 /* ----- 공중볼 차기(헤딩·발리) ----- */
@@ -1553,10 +1577,10 @@ function execAirKick(p,type,power,info){
   const ax=aimed?iv.x/iv.m:p.dir, az=aimed?iv.z/iv.m:0, head=info.mode==="header", hp=head?c.headPower:1;   // 조준 안 하면 상대 골대 방향
   S.air=null; p.a=Math.atan2(az,ax); p.vx*=0.4; p.vz*=0.4;
   if (type==="pass"){
-    const pc=CONFIG.pass, v=(pc.min+(pc.max-pc.min)*power)*hp, m=pickMate(p,ax,az,pc.wantMin+(pc.wantMax-pc.wantMin)*power*hp,pc.angle,3);
+    const pc=CONFIG.pass, D=(pc.dist[0]+(pc.dist[1]-pc.dist[0])*power)*MS*hp, v=rollSpeedFor(D), m=pickMate(p,ax,az,D,pc.angle,3);
     doKick(p,ax*v,head?0.8:0.4,az*v,power); if (m) setRecv(p,m);
   } else if (type==="cross"){
-    const cc=CONFIG.cross, d=(cc.min+(cc.max-cc.min)*power)*hp, m=pickMate(p,ax,az,d,cc.assist,10);
+    const cc=CONFIG.cross, d=(cc.dist[0]+(cc.dist[1]-cc.dist[0])*power)*MS*hp, m=pickMate(p,ax,az,d,cc.assist,10);
     crossTo(p,p.x+ax*d,p.z+az*d,m);
   } else {
     const sc=CONFIG.shot, gx=HL*p.dir, gd=hyp(gx-p.x,p.z)||1, toGoal=!aimed || (ax*(gx-p.x)+az*(-p.z))/gd>-0.2;
