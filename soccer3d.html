@@ -687,7 +687,7 @@ const CONFIG = {
   charge: { time: 0.9, min: 0.1, tap: 0.2, pressTime: 1.5 },   // 100%까지 걸리는 시간, 이보다 짧으면 '한 번 누름', 압박 지속 시간
   pass:   { min: 18, max: 31, dist: [8, 30], angle: 60, glideFrom: 0.7, glideAt: 0.9, glideFlat: 1.0, endDecel: 45 },   // CPU 패스 속도(min~max), dist: 내 패스 거리(경기장 100 기준, 세기 0%~100%), glideFrom 이상 세기면 쭉 가다가 glideAt 지점부터 서서히 멈춤
   shot:   { min: 34, max: 64, liftBase: 1.5, liftPow: 5.5, error: 0.03, errorPow: 0.07, aimWidth: 4.2 },
-  cross:  { dist: [9, 30], angle: 38, assist: 35 },                       // 비거리(경기장 100 기준, 세기 0%~100%), 발사각(도), 조준 보정각(도)
+  cross:  { dist: [9, 30], angle: 38, assist: 35, bounce: [0.32, 0.62], keep: 0.84, stopVy: 1.0 },   // bounce: 아무도 못 받고 떨어졌을 때 튀는 정도(세기 0%~100%), keep: 튈 때마다 남는 앞쪽 속도                       // 비거리(경기장 100 기준, 세기 0%~100%), 발사각(도), 조준 보정각(도)
   ball:   { g: 9.8, bounce: 0.55, roll: 0.5, rollFlat: 1.2, air: 0.12 },
   tackle: { user: 3.0, cpu: 1.2, slideSpeed: 9, slideTime: 0.55 },       // 초당 공 뺏기 확률(상대 팀만 씀. 우리 팀은 발 뻗기 접촉으로만 뺏음)
   body:   { radius: 0.2, ownerStrength: 0.55, block: 0.8, ownerSlow: 0.35, loseTime: 0.7, recover: 1.5, spill: 2.8 },   // 몸싸움: 몸통 반지름(키 배율), 공 가진 선수 힘(1보다 작으면 더 밀림), 붙어서 이 시간(초) 밀리면 공을 흘림
@@ -850,7 +850,7 @@ function slide(p,dir){
 /* ===== 킥 ===== */
 function doKick(p,vx,vy,vz,power){
   if (ball.owner===p && (p.gk || dist(p,ball)>1.8*CONFIG.size.player)){ ball.x=p.x+Math.cos(p.a)*0.6; ball.z=p.z+Math.sin(p.a)*0.6; ball.y=p.gk?0.4:BR; }   // 드리블 중엔 공이 있는 자리에서 그대로 찬다
-  ball.owner=null; ball.glide=null; ball.vx=vx; ball.vy=vy; ball.vz=vz; ball.last=p.team; ballTouch(p,p.gk&&ball.y>0.3?"hand":"foot");
+  ball.owner=null; ball.glide=null; ball.cross=null; ball.vx=vx; ball.vy=vy; ball.vz=vz; ball.last=p.team; ballTouch(p,p.gk&&ball.y>0.3?"hand":"foot");
   if (p.gk && S.ctrl===p) switchPlayer();
   p.cool=0.45; p.kickT=0.28; p.a=Math.atan2(vz,vx); p.hold=0; p.volleyLift=0;
   sfx.kick(power??0.5);
@@ -863,7 +863,9 @@ function passTo(p,m,v){
 function crossTo(p,tx,tz,m){
   const dx=tx-p.x, dz=tz-p.z, d=Math.max(6,hyp(dx,dz)), a=CONFIG.cross.angle*Math.PI/180;
   const v=Math.sqrt(d*CONFIG.ball.g/Math.sin(2*a))*1.06;
-  doKick(p, dx/d*v*Math.cos(a), v*Math.sin(a), dz/d*v*Math.cos(a), Math.min(1,d/(CONFIG.cross.dist[1]*MS)));
+  const pw=Math.min(1,d/(CONFIG.cross.dist[1]*MS));
+  doKick(p, dx/d*v*Math.cos(a), v*Math.sin(a), dz/d*v*Math.cos(a), pw);
+  ball.cross={ pw, dx:dx/d, dz:dz/d };                       // 아무도 못 받으면 떨어진 뒤에도 그 방향으로 통통 튀며 나아감
   if (m) setRecv(p,m);
 }
 function shootAt(p,tz,power,err){
@@ -913,7 +915,7 @@ function userKick(p,type,power){
 
 /* ===== 소유 ===== */
 function setOwner(p){
-  ball.owner=p; ball.glide=null; ball.last=p.team; S.poss=p.team; ballTouch(p,p.gk?"hand":"foot");
+  ball.owner=p; ball.glide=null; ball.cross=null; ball.last=p.team; S.poss=p.team; ballTouch(p,p.gk?"hand":"foot");
   if (S.side!==p.team){ S.side=p.team; S.press=0; } S.recv[0]=S.recv[1]=null;
   if (p.team===0) S.ctrl=p;                               // 내 골키퍼가 잡으면 골키퍼를 직접 조작
   if (p.gk) p.hold=p.team===0?CONFIG.gk.userHold:CONFIG.gk.hold;
@@ -997,8 +999,16 @@ function stepBallCore(dt){
     ball.vy-=c.g*dt; magnus(ball,dt); ball.x+=ball.vx*dt; ball.y+=ball.vy*dt; ball.z+=ball.vz*dt;
     const sp=hyp(ball.vx,ball.vz);
     if (ball.y<=BR){
-      ball.y=BR; ball.vy = ball.vy<-1.5 ? -ball.vy*c.bounce : 0;
-      if (sp>0){ const ns=rollStep(ball,ball.glide,sp,dt); ball.vx*=ns/sp; ball.vz*=ns/sp; }
+      const cr=ball.cross, cc=CONFIG.cross;
+      if (cr && ball.vy<-cc.stopVy){                          // 크로스가 떨어짐: 세기에 따라 높이 튀고, 앞쪽(크로스 방향)으로 계속 나아감
+        const e=cc.bounce[0]+(cc.bounce[1]-cc.bounce[0])*cr.pw, h=Math.max(sp*cc.keep,1.5);
+        ball.y=BR; ball.vy=-ball.vy*e; ball.vx=cr.dx*h; ball.vz=cr.dz*h;
+        if (ball.vy<cc.stopVy) ball.cross=null;
+      } else {
+        if (cr) ball.cross=null;                              // 다 튀고 나면 보통 공처럼 굴러감
+        ball.y=BR; ball.vy = ball.vy<-1.5 ? -ball.vy*c.bounce : 0;
+        if (sp>0){ const ns=rollStep(ball,ball.glide,sp,dt); ball.vx*=ns/sp; ball.vz*=ns/sp; }
+      }
     } else { const k=Math.exp(-c.air*dt); ball.vx*=k; ball.vz*=k; }
     ball.spin+=sp*dt*4;
   }
@@ -1053,7 +1063,7 @@ function rollSpeedFor(D){                                  // 보통 마찰로 �
   let lo=0, hi=120; for (let i=0;i<40;i++){ const m=(lo+hi)/2; if (dist(m)<D) lo=m; else hi=m; } return lo;
 }
 function ballReset(){
-  ball.r=ballRadius(); ball.px=ball.x; ball.py=ball.y; ball.pz=ball.z; ball.state=ball.owner?"owned":"ground";
+  ball.cross=null; ball.glide=null; ball.r=ballRadius(); ball.px=ball.x; ball.py=ball.y; ball.pz=ball.z; ball.state=ball.owner?"owned":"ground";
   ball.w={x:0,y:0,z:0}; ball.touch=ball.touch||{ p:null, part:null, t:-1 };
 }
 function ballTouch(p,part){ ball.touch={ p, part, t:S.time }; }
