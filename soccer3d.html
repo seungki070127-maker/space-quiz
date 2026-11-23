@@ -724,7 +724,7 @@ const ball = {};
 let players = [];
 function resetState(){
   Object.assign(S, { t:0, time:0, score:[0,0], half:1, freeze:0, dead:false, poss:-1, side:0, recv:[null,null],
-    ctrl:null, charge:null, press:false, scorer:-1, pending:null, msgT:0 });
+    ctrl:null, charge:null, press:false, scorer:-1, pending:null, msgT:0, fk:null });
   players = [];
   for (let team=0; team<2; team++) FORM.forEach(([hx,hz,role],i) => players.push({
     team, dir: team?-1:1, i, role, gk: role==="GK", hx, hz, x:0, z:0, vx:0, vz:0, a:0, ph:Math.random()*6,
@@ -858,7 +858,7 @@ function slide(p,dir){
 /* ===== 킥 ===== */
 function doKick(p,vx,vy,vz,power){
   if (ball.owner===p && (p.gk || dist(p,ball)>1.8*CONFIG.size.player)){ ball.x=p.x+Math.cos(p.a)*0.6; ball.z=p.z+Math.sin(p.a)*0.6; ball.y=p.gk?0.4:BR; }   // 드리블 중엔 공이 있는 자리에서 그대로 찬다
-  ball.owner=null; ball.glide=null; ball.cross=null; ball.vx=vx; ball.vy=vy; ball.vz=vz; ball.last=p.team; ballTouch(p,p.gk&&ball.y>0.3?"hand":"foot");
+  S.fk=null; ball.owner=null; ball.glide=null; ball.cross=null; ball.vx=vx; ball.vy=vy; ball.vz=vz; ball.last=p.team; ballTouch(p,p.gk&&ball.y>0.3?"hand":"foot");
   if (p.gk && S.ctrl===p) switchPlayer();
   p.cool=0.45; p.kickT=0.28; p.a=Math.atan2(vz,vx); p.hold=0; p.volleyLift=0;
   sfx.kick(power??0.5);
@@ -927,7 +927,7 @@ function userKick(p,type,power){
 
 /* ===== 소유 ===== */
 function setOwner(p){
-  ball.owner=p; ball.glide=null; ball.cross=null; ball.last=p.team; S.poss=p.team; ballTouch(p,p.gk?"hand":"foot");
+  if (S.fk && S.fk.p!==p) S.fk=null; ball.owner=p; ball.glide=null; ball.cross=null; ball.last=p.team; S.poss=p.team; ballTouch(p,p.gk?"hand":"foot");
   if (S.side!==p.team){ S.side=p.team; S.press=0; } S.recv[0]=S.recv[1]=null;
   if (p.team===0) S.ctrl=p;                               // 내 골키퍼가 잡으면 골키퍼를 직접 조작
   if (p.gk) p.hold=p.team===0?CONFIG.gk.userHold:CONFIG.gk.hold;
@@ -986,6 +986,8 @@ function stepBallCore(dt){
     const k=Math.min(1,dt*18);
     ball.x+=(o.x+Math.cos(o.a)*0.3-ball.x)*k; ball.z+=(o.z+Math.sin(o.a)*0.3-ball.z)*k;
     ball.y=1.05*CONFIG.size.player; ball.vx=o.vx; ball.vz=o.vz; ball.vy=0;
+  } else if (o && S.fk && S.fk.p===o){                     // 세트피스(코너킥): 공은 제자리에 가만히
+    ball.x=S.fk.x; ball.z=S.fk.z; ball.y=BR; ball.vx=ball.vy=ball.vz=0;
   } else if (o){                                            // 드리블: 발 주변 원(반지름 = 선수 키 × radius) 안에서만 공을 툭툭 차며 나아간다
     const d=CONFIG.dribble, K=CONFIG.size.player, fx=Math.cos(o.a), fz=Math.sin(o.a), sp=hyp(o.vx,o.vz);
     const R=d.radius*1.8*K, minA=d.min*K, rest=(minA+R)/2;   // R: 원 반지름(m), minA: 발 앞 최소 거리, rest: 서 있을 때 공 자리
@@ -1155,6 +1157,11 @@ function setPiece(team,x,z,label,byGk){
     for (const q of players) if (q.team!==team){ const dx=q.x-x, dz=q.z-z, d=hyp(dx,dz)||1;
       if (d<8){ q.x=clamp(x+dx/d*8,-HL,HL); q.z=clamp(z+dz/d*8,-HW,HW); } }
     S.dead=false; setOwner(taker); S.freeze=0.5;
+    if (label==="코너킥"){                                   // 코너킥: 공은 코너에 가만히, 키커는 공 뒤에 서서 한 번에 찬다(드리블 없음)
+      const tx=Math.sign(x)*(HL-PSPOT*0.7), tz=0, a=Math.atan2(tz-z,tx-x);   // 기본 조준: 페널티 지점 앞
+      S.fk={ p:taker, x, z, a }; taker.a=a; taker.x=x-Math.cos(a)*0.55; taker.z=z-Math.sin(a)*0.55;
+      taker.think=rnd(1.2,2.0);
+    }
   }};
 }
 function finish(){
@@ -1808,6 +1815,13 @@ function stepPlayers(dt){
       p.vx*=1-1.8*dt; p.vz*=1-1.8*dt; if (p.slideT<=0) p.stun=0.4; continue;
     }
     if (p.stun>0){ p.stun-=dt; steer(p,0,0,dt); continue; }
+    if (S.fk && S.fk.p===p){                                // 코너킥 키커: 공 뒤에 서서 조이스틱으로 방향만 돌림
+      if (p===S.ctrl){ const iv=inputVec(); if (iv.m>0.3) S.fk.a=Math.atan2(iv.z,iv.x); }
+      p.a=S.fk.a; p.vx=p.vz=0; p.x=S.fk.x-Math.cos(p.a)*0.55; p.z=S.fk.z-Math.sin(p.a)*0.55;
+      if (p.team===1 && p.think<=0){ const m=players.filter(q=>q.team===1&&!q.gk&&q!==p).sort((a,b)=>hyp(a.x-HL*p.dir,a.z)-hyp(b.x-HL*p.dir,b.z))[0];
+        crossTo(p, m?m.x:HL*p.dir-PSPOT*0.7*p.dir, m?m.z:0, m); }   // 상대 키커: 잠시 뒤 골문 앞 동료에게 크로스
+      continue;
+    }
     if (p.gk && p===S.ctrl && o===p && !S.dead){           // 공 잡은 내 골키퍼: 페널티박스 안에서 직접 이동
       const iv=inputVec(); steer(p,iv.x*CONFIG.gk.carry,iv.z*CONFIG.gk.carry,dt);
       p.x=clamp(p.x,-HL+0.5,-HL+PBX-0.5); p.z=clamp(p.z,-PBZ+0.6,PBZ-0.6);
@@ -1837,6 +1851,8 @@ function stepPlayers(dt){
     }
   }
   bodyClash(dt);
+  if (S.fk){ for (const q of players) if (q.team!==S.fk.p.team){ const dx=q.x-S.fk.x, dz=q.z-S.fk.z, d=hyp(dx,dz)||1, R=9.15*MS;   // 코너킥 동안 상대는 9.15m 밖
+    if (d<R){ q.x=S.fk.x+dx/d*R; q.z=S.fk.z+dz/d*R; } } }
 }
 /* ===== 몸싸움: 선수끼리 몸을 통과하지 않고 밀어냄 =====
    몸통 위치는 포즈 관절(골반·어깨 가운데, 몸이 기울면 같이 움직임)로 잡고, 둘의 몸통 원이 겹친 만큼 서로 밀어낸다.
