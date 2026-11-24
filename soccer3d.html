@@ -684,7 +684,7 @@ const CONFIG = {
   airKick: { reach: 0.6, jump: 0.55, headMin: 1.45, hold: 3, headPower: 0.65, volleyError: 0.05 },   // 공중볼 차기: reach = 몸에서 공까지 닿는 여유(m), jump = 헤딩 점프 최대 높이(m), headMin = 이 높이(선수 기준 m)보다 높으면 헤딩·아래면 발리, hold = 버튼을 뗀 뒤 공을 기다리는 시간(초, 땅볼·공중볼 모두), headPower = 헤딩 세기 배율, volleyError = 발리슛 추가 오차
   autoSwitch: { every: 0.12, margin: 1.5 },   // 패스 중 자동 선수 전환: 검사 주기(초), 이만큼(m) 더 가까워야 전환
   player: { speed: 10.5, dribble: 0.9, accel: 7, cpuSpeed: 0.93, control: 1.35, controlHeight: 1.6 },   // control: 이 거리 안에 공이 오면 받는다, controlHeight: 이 높이 아래의 공만
-  charge: { time: 0.9, min: 0.1, tap: 0.2, pressTime: 1.5 },   // 100%까지 걸리는 시간, 이보다 짧으면 '한 번 누름', 압박 지속 시간
+  charge: { time: 0.9, min: 0.1, tap: 0.2, airTap: 0.1, pressTime: 1.5 },   // airTap: 공이 아무에게도 없을 때 이만큼만 꾹 눌러도 '받으면 바로 차기' 예약   // 100%까지 걸리는 시간, 이보다 짧으면 '한 번 누름', 압박 지속 시간
   pass:   { min: 18, max: 31, dist: [8, 30], speed: [17, 27], angle: 60, glideFrom: 0.7, glideAt: 0.9, endDecel: 45, boost: [1.5, 1.2, 1.0] },   // boost: 기본 속도에 곱하는 배율(초반·중반·후반, 거리에 따라 부드럽게 줄어듦)   // speed: 내 패스 처음 속도(세기 0%~100%, 세기에 따라 조금씩 빨라짐)   // CPU 패스 속도(min~max), dist: 내 패스 거리(경기장 100 기준, 세기 0%~100%), glideFrom 이상 세기면 쭉 가다가 glideAt 지점부터 서서히 멈춤
   shot:   { min: 34, max: 64, liftBase: 1.5, liftPow: 5.5, error: 0.03, errorPow: 0.07, aimWidth: 4.2 },
   cross:  { dist: [9, 30], angle: 38, assist: 35, bounce: [0.32, 0.62], keep: 0.84, stopVy: 1.0 },   // bounce: 아무도 못 받고 떨어졌을 때 튀는 정도(세기 0%~100%), keep: 튈 때마다 남는 앞쪽 속도                       // 비거리(경기장 100 기준, 세기 0%~100%), 발사각(도), 조준 보정각(도)
@@ -807,7 +807,7 @@ function release(type){
   if (!ball.owner){                                        // 공이 누구 것도 아님: 닿으면 바로 차고, 아직 멀면(꾹 눌렀다 뗐을 때) 공이 올 때까지 기다렸다가 누른 세기로 찬다
     if (ballAirborne()){ const info=airReachable(c); if (info) return execAirKick(c,type,power,info); }
     else if (c.cool<=0 && dist(c,ball)<1.5) return userKick(c,type,power);
-    if (ch.t>CONFIG.charge.tap || ch.cont){ S.air={ type, power, until:S.time+CONFIG.airKick.hold }; return; }
+    if (ch.t>CONFIG.charge.airTap || ch.cont){ S.air={ type, power, until:S.time+CONFIG.airKick.hold }; return; }
   }
   if (ball.owner===c || (!ball.owner && c.cool<=0 && dist(c,ball)<1.5 && ball.y<2.3)) return userKick(c,type,power);
   if (ch.own) return;
@@ -1945,7 +1945,7 @@ function update(dt){
     S.charge.t=Math.min(S.charge.t+dt,CONFIG.charge.time);
     if (S.air){
       if (S.charge.type===S.air.type){ S.air.power=clamp(S.charge.t/CONFIG.charge.time,CONFIG.charge.min,1); S.air.until=S.time+CONFIG.airKick.hold; }   // 이어서 누르는 중: 차는 세기도 바로 반영
-      else if (S.charge.t>CONFIG.charge.tap) S.air=null;     // 다른 버튼을 길게 누름: 예약을 바꿈
+      else if (S.charge.t>CONFIG.charge.airTap) S.air=null;     // 다른 버튼을 길게 누름: 예약을 바꿈
     }
   }
   if (S.press>0) S.press-=dt;
@@ -2416,7 +2416,7 @@ function drawOverlay(){
       ctx.beginPath(); ctx.moveTo(h.x-6,h.y-10); ctx.lineTo(h.x+6,h.y-10); ctx.lineTo(h.x,h.y); ctx.closePath(); ctx.stroke(); ctx.fill();
       // 강도 게이지: 누르는 중이면 실시간, 공을 기다리는 중(예약)이면 저장된 세기를 계속 보여 줌
       let gv=null;
-      if (S.charge && (ball.owner===c || S.charge.t>CONFIG.charge.tap || S.charge.cont)) gv={ pw:clamp(S.charge.t/CONFIG.charge.time,0,1), type:S.charge.type, held:true };
+      if (S.charge && (ball.owner===c || S.charge.t>(ball.owner?CONFIG.charge.tap:CONFIG.charge.airTap) || S.charge.cont)) gv={ pw:clamp(S.charge.t/CONFIG.charge.time,0,1), type:S.charge.type, held:true };
       else if (S.air) gv={ pw:S.air.power, type:S.air.type, held:false };
       if (gv){ const pw=gv.pw, bw=48;
         ctx.lineCap="round"; ctx.lineWidth=8; ctx.strokeStyle=gv.held?"rgba(0,0,0,.55)":"rgba(255,216,74,.9)"; ctx.beginPath(); ctx.moveTo(h.x-bw/2,h.y-20); ctx.lineTo(h.x+bw/2,h.y-20); ctx.stroke();
