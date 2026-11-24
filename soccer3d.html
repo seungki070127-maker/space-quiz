@@ -741,6 +741,8 @@ function kickoff(team){
   S.dead=false; S.scorer=-1; S.charge=null; S.press=0; S.air=null;
   S.ctrl = players[9];
   setOwner(k);
+  S.fk={ p:k, x:0, z:0, a:k.dir>0?0:Math.PI, kickoff:true };   // 킥오프: 공은 센터에 가만히, 누가 공을 차기 전까지 아무도 움직이지 못함
+  k.think=rnd(0.6,1.2);
   S.freeze = 1.3; say("킥오프", 1.2); sfx.whistle();
 }
 
@@ -1832,6 +1834,7 @@ function stepPlayers(dt){
       p.vx*=1-1.8*dt; p.vz*=1-1.8*dt; if (p.slideT<=0) p.stun=0.4; continue;
     }
     if (p.stun>0){ p.stun-=dt; steer(p,0,0,dt); continue; }
+    if (S.fk && S.fk.kickoff && S.fk.p!==p){ p.vx=p.vz=0; p.run=0; continue; }   // 킥오프 전: 키커 말고는 제자리
     if (S.fk && S.fk.p===p){                                // 코너킥 키커: 공 뒤에 서서 조이스틱으로 방향만 돌림
       p.run=0;                                               // 서서 준비(달리는 다리 동작 없음)
       if (p===S.ctrl){ const iv=inputVec(); if (iv.m>0.3) S.fk.a=Math.atan2(iv.z,iv.x); }
@@ -1843,6 +1846,11 @@ function stepPlayers(dt){
         continue;
       }
       p.a=S.fk.a; p.vx=p.vz=0; p.x=S.fk.x-Math.cos(p.a)*0.55; p.z=S.fk.z-Math.sin(p.a)*0.55;
+      if (S.fk.kickoff){                                     // 상대 킥오프: 잠시 뒤 가까운 동료에게 땅볼 패스
+        if (p.team===1 && p.think<=0){ const m=players.filter(q=>q.team===1&&!q.gk&&q!==p).sort((a,b)=>hyp(a.x-p.x,a.z-p.z)-hyp(b.x-p.x,b.z-p.z))[0];
+          if (m){ S.fk.a=p.a=Math.atan2(m.z-p.z,m.x-p.x); passTo(p,m,clamp(8+dist(p,m)*0.55,CONFIG.pass.min,CONFIG.pass.max)); } }
+        continue;
+      }
       if (p.team===1 && p.think<=0){ const m=players.filter(q=>q.team===1&&!q.gk&&q!==p).sort((a,b)=>hyp(a.x-HL*p.dir,a.z)-hyp(b.x-HL*p.dir,b.z))[0];
         crossTo(p, m?m.x:HL*p.dir-PSPOT*0.7*p.dir, m?m.z:0, m); }   // 상대 키커: 잠시 뒤 골문 앞 동료에게 크로스
       continue;
@@ -1876,7 +1884,7 @@ function stepPlayers(dt){
     }
   }
   bodyClash(dt);
-  if (S.fk){ for (const q of players) if (q.team!==S.fk.p.team){ const dx=q.x-S.fk.x, dz=q.z-S.fk.z, d=hyp(dx,dz)||1, R=9.15*MS;   // 코너킥 동안 상대는 9.15m 밖
+  if (S.fk && !S.fk.kickoff){ for (const q of players) if (q.team!==S.fk.p.team){ const dx=q.x-S.fk.x, dz=q.z-S.fk.z, d=hyp(dx,dz)||1, R=9.15*MS;   // 코너킥 동안 상대는 9.15m 밖
     if (S.fk.throw && d<CONFIG.throwIn.keep*MS){ const R2=CONFIG.throwIn.keep*MS; q.x=S.fk.x+dx/d*R2; q.z=S.fk.z+dz/d*R2; } else if (!S.fk.throw && d<R){ q.x=S.fk.x+dx/d*R; q.z=S.fk.z+dz/d*R; } } }
 }
 /* ===== 몸싸움: 선수끼리 몸을 통과하지 않고 밀어냄 =====
