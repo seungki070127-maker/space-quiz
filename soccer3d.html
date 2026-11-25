@@ -742,7 +742,7 @@ function kickoff(team){
   S.dead=false; S.scorer=-1; S.charge=null; S.press=0; S.air=null;
   S.ctrl = players[9];
   setOwner(k);
-  S.fk={ p:k, x:0, z:0, a:k.dir>0?Math.PI:0, kickoff:true, auto:S.time+1.3+CONFIG.kickoffAuto.wait };   // auto: 내 킥오프를 이 시각까지 안 차면 약하게 자동 패스   // 킥오프: 공은 센터에 가만히, 누가 공을 차기 전까지 아무도 움직이지 못함
+  S.fk={ p:k, x:0, z:0, a:k.dir>0?Math.PI:0, kickoff:true, px:k.x, pz:k.z, pa:k.a, auto:S.time+1.3+CONFIG.kickoffAuto.wait };   // auto: 내 킥오프를 이 시각까지 안 차면 약하게 자동 패스   // 킥오프: 공은 센터에 가만히, 누가 공을 차기 전까지 아무도 움직이지 못함
   k.think=rnd(0.6,1.2);
   S.freeze = 1.3; say("킥오프", 1.2); sfx.whistle();
 }
@@ -1848,7 +1848,8 @@ function stepPlayers(dt){
           if (m){ S.fk.a=Math.atan2(m.z-p.z,m.x-p.x); p.a=S.fk.a; } throwIn(p,Math.cos(p.a),Math.sin(p.a),m?clamp(hyp(m.x-p.x,m.z-p.z)/(CONFIG.throwIn.dist[1]*MS),0.1,1):0.5); }
         continue;
       }
-      p.a=S.fk.a; p.vx=p.vz=0; p.x=S.fk.x-Math.cos(p.a)*0.55; p.z=S.fk.z-Math.sin(p.a)*0.55;
+      if (S.fk.kickoff){ p.a=S.fk.pa; p.x=S.fk.px; p.z=S.fk.pz; p.vx=p.vz=0; }   // 킥오프: 사람은 처음 자리·방향 그대로 가만히, 화살표만 돎
+      else { p.a=S.fk.a; p.vx=p.vz=0; p.x=S.fk.x-Math.cos(p.a)*0.55; p.z=S.fk.z-Math.sin(p.a)*0.55; }
       if (S.fk.kickoff && p.team===0 && S.time>S.fk.auto && !S.charge){   // 내 킥오프를 5초 넘게 안 차면: 가까운 동료에게 약한 패스
         const m=players.filter(q=>q.team===0&&!q.gk&&q!==p).sort((a,b)=>hyp(a.x-p.x,a.z-p.z)-hyp(b.x-p.x,b.z-p.z))[0];
         if (m){ S.fk.a=p.a=Math.atan2(m.z-p.z,m.x-p.x); const c=CONFIG.pass, D=hyp(m.x-p.x,m.z-p.z)/MS;
@@ -2465,7 +2466,8 @@ function render(){
   if (c){
     const iv=inputVec(), want=S.fk&&S.fk.p===c?S.fk.a:(iv.m>0.15?Math.atan2(iv.z,iv.x):c.a), K=CONFIG.size.player, CA=CONFIG.arrow;   // 세트피스는 실제로 찰 방향
     arrowA+=Math.atan2(Math.sin(want-arrowA),Math.cos(want-arrowA))*Math.min(1,CA.turn/60);  // 부드럽게 돌아감
-    arrow.position.set(c.x+Math.cos(arrowA)*CA.ahead*K, 0.035, c.z+Math.sin(arrowA)*CA.ahead*K);
+    const ac=S.fk&&S.fk.kickoff&&S.fk.p===c?ball:c;       // 킥오프: 화살표는 공 둘레를 돎
+    arrow.position.set(ac.x+Math.cos(arrowA)*CA.ahead*K, 0.035, ac.z+Math.sin(arrowA)*CA.ahead*K);
     arrow.rotation.y=-arrowA; arrow.scale.setScalar(CA.size*K); arrow.material.color.set(S.air?0xffd84a:0xffffff);   // 공중볼을 기다리는 중이면 노랑
   }
   const lp=!MENU.has(S.mode) && !S.dead ? landingPoint() : null; landMark.visible=!!lp;
