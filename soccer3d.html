@@ -692,6 +692,7 @@ const CONFIG = {
   tackle: { user: 3.0, cpu: 1.2, slideSpeed: 9, slideTime: 0.55 },       // 초당 공 뺏기 확률(상대 팀만 씀. 우리 팀은 발 뻗기 접촉으로만 뺏음)
   body:   { radius: 0.2, ownerStrength: 0.55, block: 0.8, ownerSlow: 0.35, loseTime: 0.7, recover: 1.5, spill: 2.8 },   // 몸싸움: 몸통 반지름(키 배율), 공 가진 선수 힘(1보다 작으면 더 밀림), 붙어서 이 시간(초) 밀리면 공을 흘림
   throwIn: { dist: [4, 15], angle: 28, time: 0.42, keep: 2 },   // 스로인: 던지는 거리(경기장 100 기준, 세기 0%~100% — 패스 최대의 절반), 던지는 각도, 동작 시간, 상대가 떨어져 있는 거리(m)
+  kickoffAuto: { wait: 5, maxPower: 0.3 },   // 내 킥오프를 wait 초 안 차면 가까운 동료에게 약한(최대 maxPower) 패스
   poke:   { range: 2.25, reach: 1.15, time: 0.34, hitFrom: 0.07, hitTo: 0.24, slack: 0.06, push: 4.5, cool: 0.45, mateCool: 0.9 },   // 발 뻗어 뺏기: 공까지 거리(m) 안이면 뻗음, 동작 시간, 발 판정이 켜지는 구간, 발 판정 여유, 공이 튕겨 나가는 속도
   gk:     { speed: 6.5, dive: 6.0, reach: 1.1, reactMin: 0.17, reactMax: 0.33, catch: 0.6, hold: 1.1, userHold: 8, carry: 4, punt: [28, 62] },   // userHold: 내 골키퍼가 공을 들고 있을 수 있는 시간, carry: 들고 걷는 속도, punt: 슛 버튼 롱킥 거리
   cpu:    { activeAbove: 4, pokeCool: 0.55, pressRange: 14, slideChance: 0.6, think: 0.3, shootRange: 20, passUrge: 0.1, shotError: 0.15 },
@@ -741,7 +742,7 @@ function kickoff(team){
   S.dead=false; S.scorer=-1; S.charge=null; S.press=0; S.air=null;
   S.ctrl = players[9];
   setOwner(k);
-  S.fk={ p:k, x:0, z:0, a:k.dir>0?0:Math.PI, kickoff:true };   // 킥오프: 공은 센터에 가만히, 누가 공을 차기 전까지 아무도 움직이지 못함
+  S.fk={ p:k, x:0, z:0, a:k.dir>0?0:Math.PI, kickoff:true, auto:S.time+1.3+CONFIG.kickoffAuto.wait };   // auto: 내 킥오프를 이 시각까지 안 차면 약하게 자동 패스   // 킥오프: 공은 센터에 가만히, 누가 공을 차기 전까지 아무도 움직이지 못함
   k.think=rnd(0.6,1.2);
   S.freeze = 1.3; say("킥오프", 1.2); sfx.whistle();
 }
@@ -1846,6 +1847,12 @@ function stepPlayers(dt){
         continue;
       }
       p.a=S.fk.a; p.vx=p.vz=0; p.x=S.fk.x-Math.cos(p.a)*0.55; p.z=S.fk.z-Math.sin(p.a)*0.55;
+      if (S.fk.kickoff && p.team===0 && S.time>S.fk.auto && !S.charge){   // 내 킥오프를 5초 넘게 안 차면: 가까운 동료에게 약한 패스
+        const m=players.filter(q=>q.team===0&&!q.gk&&q!==p).sort((a,b)=>hyp(a.x-p.x,a.z-p.z)-hyp(b.x-p.x,b.z-p.z))[0];
+        if (m){ S.fk.a=p.a=Math.atan2(m.z-p.z,m.x-p.x); const c=CONFIG.pass, D=hyp(m.x-p.x,m.z-p.z)/MS;
+          userKick(p,"pass",clamp((D-c.dist[0])/(c.dist[1]-c.dist[0]),0.05,CONFIG.kickoffAuto.maxPower)); say("자동 패스",0.8); }
+        continue;
+      }
       if (S.fk.kickoff){                                     // 상대 킥오프: 잠시 뒤 가까운 동료에게 땅볼 패스
         if (p.team===1 && p.think<=0){ const m=players.filter(q=>q.team===1&&!q.gk&&q!==p).sort((a,b)=>hyp(a.x-p.x,a.z-p.z)-hyp(b.x-p.x,b.z-p.z))[0];
           if (m){ S.fk.a=p.a=Math.atan2(m.z-p.z,m.x-p.x); passTo(p,m,clamp(8+dist(p,m)*0.55,CONFIG.pass.min,CONFIG.pass.max)); } }
