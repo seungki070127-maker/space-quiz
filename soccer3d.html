@@ -1508,6 +1508,15 @@ function openClub(){
     const w=document.createElement("span"); w.className="nmw"; w.append(nm,ex); r.append(no,ps,w); bench.append(r);
   }
 }
+// 경기 선수 22명의 머리 위 이름: 선발 11명(골키퍼 → 뒤쪽 줄부터)을 경기 선수 순서(골키퍼, 수비, 미드필더, 공격)에 차례로 붙임
+function shortTag(pl){ const n=plShort(pl); return n.length>9 ? n.slice(0,8)+"." : n; }   // 긴 이름은 줄여서
+function matchNames(club,mine){
+  const sq=club && SQUADS[club.abbr]; if (!sq) return Array(11).fill(null);
+  const xi=mine?clubXI(club.abbr,sq):sq.x, out=Array(11).fill(null);
+  // 선발 순서는 줄마다 오른쪽 측면부터. 경기 선수는 줄마다 z 작은 쪽부터라서, 오른쪽이 +z 인 우리 팀(오른쪽 공격)은 줄 안 순서를 뒤집음
+  const slots=mine?[0,4,3,2,1,8,7,6,5,10,9]:[0,1,2,3,4,5,6,7,8,9,10];
+  xi.forEach((pi,k)=>{ out[slots[k]]=shortTag(sq.p[pi]); }); return out;
+}
 function homeView(v){                                           // 홈 ↔ 내 클럽 전환(왼쪽 메뉴)
   for (const b of document.querySelectorAll(".hm-nav [data-view]")){ if (b.dataset.view===v) b.setAttribute("aria-current","page"); else b.removeAttribute("aria-current"); }
   $("hmBody").hidden=v!=="home"; $("hmClub").hidden=v!=="club"; $("hmMain").classList.toggle("club",v==="club");
@@ -1992,7 +2001,8 @@ function setMode(m){
 }
 function start(){
   const sz=season(), opp=sz && clubById(sz.opp[sz.md]);
-  S.cpuActive=!opp || opp.rep>CONFIG.cpu.activeAbove;     // 상대 팀 별이 4개 이하면 적극 수비(발 뻗기·협력 압박·슬라이딩)를 쓰지 않음
+  S.cpuActive=!opp || opp.rep>CONFIG.cpu.activeAbove;
+  S.names=[...matchNames(clubById(SAVE.club),true), ...matchNames(opp,false)];   // 선수 머리 위 이름(내 팀은 내가 고른 선발, 상대는 기본 선발)     // 상대 팀 별이 4개 이하면 적극 수비(발 뻗기·협력 압박·슬라이딩)를 쓰지 않음
   resetState(); setMode("playing");
 }
 
@@ -2436,6 +2446,18 @@ function drawOverlay(){
         if (!ball.owner || !gv.held){ ctx.font="bold 11px system-ui,sans-serif"; ctx.textAlign="center"; ctx.lineWidth=3; ctx.strokeStyle="rgba(0,0,0,.6)";
           const lbl=`${{pass:"패스",shoot:"슛",cross:"크로스"}[gv.type]} ${Math.round(pw*100)}%`; ctx.strokeText(lbl,h.x,h.y-28); ctx.fillStyle="#fff"; ctx.fillText(lbl,h.x,h.y-28); }
       }
+    }
+  }
+  if (S.names && !MENU.has(S.mode)){                       // 선수 머리 위 영어 이름(작게, 조작 선수는 노란 표시 위)
+    ctx.font="600 10px system-ui,sans-serif"; ctx.textAlign="center"; ctx.lineJoin="round";
+    for (const p of players){
+      const nm=S.names[p.team*11+p.i]; if (!nm) continue;
+      const h=proj(p.x,2.1*CONFIG.size.player,p.z); if (!h || h.x<-40 || h.x>W+40 || h.y<0 || h.y>H) continue;
+      const me=p===c, busy=me && (S.charge || S.air);           // 게이지가 떠 있으면 조작 선수 이름은 잠시 숨김
+      if (busy) continue;
+      const y=me?h.y-14:h.y-3;
+      ctx.lineWidth=3; ctx.strokeStyle="rgba(0,0,0,.55)"; ctx.strokeText(nm,h.x,y);
+      ctx.fillStyle=me?"#ffd84a":p.team?"rgba(205,222,255,.95)":"rgba(255,255,255,.95)"; ctx.fillText(nm,h.x,y);
     }
   }
   if (S.mode!=="playing") return;
