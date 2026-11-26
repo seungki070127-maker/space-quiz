@@ -687,7 +687,7 @@ const CONFIG = {
   charge: { time: 0.9, min: 0.1, tap: 0.2, airTap: 0.1, pressTime: 1.5 },   // airTap: 공이 아무에게도 없을 때 이만큼만 꾹 눌러도 '받으면 바로 차기' 예약   // 100%까지 걸리는 시간, 이보다 짧으면 '한 번 누름', 압박 지속 시간
   pass:   { min: 18, max: 31, dist: [8, 30], speed: [17, 27], angle: 60, glideFrom: 0.7, glideAt: 0.9, endDecel: 45, boost: [1.5, 1.2, 1.0] },   // boost: 기본 속도에 곱하는 배율(초반·중반·후반, 거리에 따라 부드럽게 줄어듦)   // speed: 내 패스 처음 속도(세기 0%~100%, 세기에 따라 조금씩 빨라짐)   // CPU 패스 속도(min~max), dist: 내 패스 거리(경기장 100 기준, 세기 0%~100%), glideFrom 이상 세기면 쭉 가다가 glideAt 지점부터 서서히 멈춤
   shot:   { min: 34, max: 64, liftBase: 1.5, liftPow: 5.5, error: 0.03, errorPow: 0.07, aimWidth: 4.2 },
-  cross:  { dist: [9, 30], angle: 38, assist: 35, bounce: [0.32, 0.62], keep: 0.84, stopVy: 1.0 },   // bounce: 아무도 못 받고 떨어졌을 때 튀는 정도(세기 0%~100%), keep: 튈 때마다 남는 앞쪽 속도                       // 비거리(경기장 100 기준, 세기 0%~100%), 발사각(도), 조준 보정각(도)
+  cross:  { dist: [9, 30], angle: [25, 30], drag: 1.06, assist: 35, bounce: [0.32, 0.62], keep: 0.84, stopVy: 1.0 },   // bounce: 아무도 못 받고 떨어졌을 때 튀는 정도(세기 0%~100%), keep: 튈 때마다 남는 앞쪽 속도                       // 비거리(경기장 100 기준, 세기 0%~100%), 발사각(도), 조준 보정각(도)
   ball:   { g: 9.8, bounce: 0.55, roll: 0.5, rollFlat: 1.2, air: 0.12 },
   tackle: { user: 3.0, cpu: 1.2, slideSpeed: 9, slideTime: 0.55 },       // 초당 공 뺏기 확률(상대 팀만 씀. 우리 팀은 발 뻗기 접촉으로만 뺏음)
   body:   { radius: 0.2, ownerStrength: 0.55, block: 0.8, ownerSlow: 0.35, loseTime: 0.7, recover: 1.5, spill: 2.8 },   // 몸싸움: 몸통 반지름(키 배율), 공 가진 선수 힘(1보다 작으면 더 밀림), 붙어서 이 시간(초) 밀리면 공을 흘림
@@ -882,9 +882,10 @@ function throwIn(p,ax,az,power){
   if (m) setRecv(p,m);
 }
 function crossTo(p,tx,tz,m){
-  const dx=tx-p.x, dz=tz-p.z, d=Math.max(6,hyp(dx,dz)), a=CONFIG.cross.angle*Math.PI/180;
-  const v=Math.sqrt(d*CONFIG.ball.g/Math.sin(2*a))*1.06;
-  const pw=Math.min(1,d/(CONFIG.cross.dist[1]*MS));
+  const c=CONFIG.cross, dx=tx-p.x, dz=tz-p.z, d=Math.max(6,hyp(dx,dz));
+  const pw=clamp((d/MS-c.dist[0])/(c.dist[1]-c.dist[0]),0,1);   // 거리로 되짚은 세기(0~1)
+  const a=(c.angle[0]+(c.angle[1]-c.angle[0])*pw)*Math.PI/180;    // 약하게 25° → 세게 30°
+  const v=Math.sqrt(d*CONFIG.ball.g/Math.sin(2*a))*c.drag;
   doKick(p, dx/d*v*Math.cos(a), v*Math.sin(a), dz/d*v*Math.cos(a), pw);
   ball.cross={ pw, dx:dx/d, dz:dz/d };                       // 아무도 못 받으면 떨어진 뒤에도 그 방향으로 통통 튀며 나아감
   if (m) setRecv(p,m);
