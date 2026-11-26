@@ -2448,9 +2448,10 @@ function drawOverlay(){
       }
     }
   }
-  if (S.names && !MENU.has(S.mode)){                       // 선수 머리 위 영어 이름(작게, 조작 선수는 노란 표시 위)
+  if (S.names && !MENU.has(S.mode)){                       // 공을 가진 선수 머리 위 영어 이름(작게, 조작 선수는 노란 표시 위)
     ctx.font="600 10px system-ui,sans-serif"; ctx.textAlign="center"; ctx.lineJoin="round";
     for (const p of players){
+      if (ball.owner!==p) continue;                          // 공을 가진 선수만
       const nm=S.names[p.team*11+p.i]; if (!nm) continue;
       const h=proj(p.x,2.1*CONFIG.size.player,p.z); if (!h || h.x<-40 || h.x>W+40 || h.y<0 || h.y>H) continue;
       const me=p===c, busy=me && (S.charge || S.air);           // 게이지가 떠 있으면 조작 선수 이름은 잠시 숨김
