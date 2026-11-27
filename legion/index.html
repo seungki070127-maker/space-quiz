@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>군단 연대기</title>
+<style>
+:root{
+  --bg:#f3f1ea;--card:#fffdf8;--text:#231f1a;--muted:#6f675c;--border:#e2dccf;
+  --accent:#b4532a;--accent-ink:#fff;--ally:#2f6fdb;--ally-bg:#e3ecfb;--enemy:#c0392b;--enemy-bg:#fae3df;
+  --ok:#1e8a4c;--bad:#c0392b;--track:#e9e3d6;--gold:#9a6f00;--cell:#f6f2e8;--cell-front:#eee6d4;
+  --sel:#f1b434;--shadow:0 8px 24px rgba(60,40,20,.10);
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#15130f;--card:#201d18;--text:#efe9de;--muted:#a79e90;--border:#383229;
+  --accent:#e0794a;--accent-ink:#1a120c;--ally:#6ea0ff;--ally-bg:#1c2a45;--enemy:#ff7a6b;--enemy-bg:#45201c;
+  --ok:#57d08a;--bad:#ff7a6b;--track:#332d25;--gold:#e8bb4a;--cell:#28241e;--cell-front:#332d24;
+  --sel:#f1b434;--shadow:0 8px 24px rgba(0,0,0,.45);}
+}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);
+  font:15px/1.5 system-ui,-apple-system,"Segoe UI","Malgun Gothic",Roboto,sans-serif;padding:20px 16px 40px}
+main{max-width:760px;margin:0 auto}
+h1{font-size:22px;margin:0}
+h2{font-size:18px;margin:0 0 10px}
+h3{font-size:15px;margin:18px 0 8px}
+h2:focus{outline:none}
+p{margin:0 0 10px}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:18px;margin-bottom:14px}
+.btn{font:inherit;font-weight:600;border:2px solid var(--border);background:var(--card);color:var(--text);
+  border-radius:10px;padding:9px 14px;cursor:pointer;transition:border-color .15s,transform .15s}
+.btn:hover:not(:disabled){border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover:not(:disabled){filter:brightness(1.08)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--sel);outline-offset:2px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.spread{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center}
+.hud{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;justify-content:space-between;margin-bottom:14px}
+.hud .stats{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px}
+.gold{color:var(--gold);font-weight:700}
+.bar{height:7px;background:var(--track);border-radius:99px;overflow:hidden;min-width:80px}
+.bar>i{display:block;height:100%;background:var(--accent);border-radius:99px;transition:width .4s}
+.chip{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;background:var(--track);margin:2px 4px 2px 0}
+.chip.trait{background:var(--ally-bg);color:var(--ally)}
+.chip.warn{background:var(--enemy-bg);color:var(--enemy)}
+.notice{border-left:4px solid var(--accent);padding:8px 12px;background:var(--cell);border-radius:6px;margin-bottom:12px}
+.notice:empty{display:none}
+/* map */
+.track{display:flex;gap:6px;margin:4px 0 14px}
+.track span{flex:1;height:6px;border-radius:99px;background:var(--track)}
+.track span.done{background:var(--accent)}
+.track span.now{background:var(--sel)}
+.choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.choice{text-align:left;display:block;width:100%}
+.choice .ti{font-size:16px;display:block;margin-bottom:4px}
+.choice .d{display:block;font-weight:400;font-size:13px;color:var(--muted)}
+/* roster */
+.units{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}
+.unit{border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:var(--cell)}
+.unit .nm{font-weight:700}
+.unit .ic{font-size:22px;margin-right:6px}
+.recruit{display:grid;gap:8px}
+.rc{display:flex;gap:10px;align-items:center;justify-content:space-between;border:1px solid var(--border);border-radius:12px;padding:10px 12px}
+.rc .info{flex:1;min-width:0}
+.rc .ic{font-size:24px}
+/* board */
+.board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) 8px repeat(4,minmax(0,1fr));gap:4px;margin:8px 0}
+.lbl{display:grid;grid-template-columns:1fr 8px 1fr;gap:4px;font-size:12px;color:var(--muted);text-align:center}
+.cell{aspect-ratio:1;min-width:0;border-radius:8px;background:var(--cell);border:2px solid transparent;
+  display:flex;align-items:center;justify-content:center;position:relative;padding:0;font:inherit;color:inherit}
+.cell.front{background:var(--cell-front)}
+button.cell{cursor:pointer;border-color:var(--border);border-style:dashed}
+button.cell:hover{border-color:var(--accent)}
+.cell.sel{border-color:var(--sel);border-style:solid}
+.cell.hidden::after{content:"?";color:var(--muted);font-weight:700}
+.tok{width:88%;height:88%;border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;position:relative}
+.tok.P{background:var(--ally-bg);box-shadow:inset 0 0 0 2px var(--ally)}
+.tok.E{background:var(--enemy-bg);box-shadow:inset 0 0 0 2px var(--enemy)}
+.tok .ico{font-size:clamp(15px,4.4vw,26px);line-height:1}
+.tok .lv{position:absolute;top:1px;left:3px;font-size:10px;font-weight:700;color:var(--ally)}
+.tok .hp{width:78%;height:4px;background:var(--track);border-radius:99px;overflow:hidden}
+.tok .hp i{display:block;height:100%;background:var(--ok)}
+.tok.E .hp i{background:var(--enemy)}
+.tok.dead{opacity:.18;filter:grayscale(1)}
+.tok.hit{animation:hit .25s}
+.tok.heal{animation:heal .35s}
+.pop{position:absolute;top:-4px;right:0;font-size:11px;font-weight:800;color:var(--bad);pointer-events:none;animation:up .5s forwards}
+.pop.h{color:var(--ok)}
+@keyframes hit{0%,100%{transform:none}30%{transform:translateX(-3px)}60%{transform:translateX(3px)}}
+@keyframes heal{50%{box-shadow:inset 0 0 0 3px var(--ok)}}
+@keyframes up{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-10px)}}
+.picks{display:flex;flex-wrap:wrap;gap:6px}
+.pick{font:inherit;font-size:13px;display:flex;align-items:center;gap:6px;border:2px solid var(--border);background:var(--card);
+  color:var(--text);border-radius:10px;padding:6px 10px;cursor:pointer}
+.pick[aria-pressed="true"]{border-color:var(--sel);background:var(--cell)}
+.pick.placed{border-color:var(--ally)}
+.pick:disabled{opacity:.45;cursor:not-allowed}
+.effects{margin:0;padding-left:18px;font-size:14px}
+.effects li{margin:2px 0}
+/* report */
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+.big{font-size:30px;font-weight:800;margin:0}
+.win{color:var(--ok)}.lose{color:var(--bad)}
+.legend-note{font-size:12px;color:var(--muted)}
+@media (max-width:480px){.card{padding:14px}.board{gap:3px}.tok .lv{display:none}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<main id="app" aria-live="off"></main>
+<script>
+"use strict";
+/* ============ 데이터 ============ */
+const TYPES = {
+  infantry:{name:'보병',icon:'🗡️',tier:1,cost:30,hp:120,atk:18,def:6,range:1,atkCd:3,moveCd:2,
+    desc:'균형 잡힌 근접 병사. 옆에 보병·창병이 붙어 있으면 밀집 대형(방어 +4).'},
+  shield:{name:'방패병',icon:'🛡️',tier:1,cost:35,hp:190,atk:10,def:14,range:1,atkCd:4,moveCd:3,taunt:true,
+    desc:'도발: 붙어 있는 적은 방패병을 먼저 공격. 바로 뒤의 궁병·의무병을 엄호.'},
+  archer:{name:'궁병',icon:'🏹',tier:1,cost:35,hp:80,atk:16,def:2,range:4,atkCd:3,moveCd:2,ranged:true,
+    desc:'사거리 4의 원거리 공격. 몸이 약해 보호가 필요.'},
+  cavalry:{name:'기병',icon:'🐎',tier:2,cost:55,hp:150,atk:24,def:6,range:1,atkCd:3,moveCd:1,flank:true,
+    desc:'빠르게 측면으로 돌아 궁병·의무병을 먼저 노림.'},
+  spear:{name:'창병',icon:'🔱',tier:2,cost:45,hp:125,atk:15,def:7,range:2,atkCd:3,moveCd:2,antiCav:true,
+    desc:'사거리 2. 기병·용기병에게 2배 피해.'},
+  medic:{name:'의무병',icon:'⛑️',tier:2,cost:50,hp:90,atk:0,heal:15,def:3,range:3,atkCd:4,moveCd:2,
+    desc:'사거리 3 안에서 가장 많이 다친 아군을 치료.'},
+  dragoon:{name:'용기병',icon:'🐉',tier:3,legend:true,cost:120,hp:260,atk:32,def:10,range:1,atkCd:3,moveCd:1,flank:true,cleave:true,
+    desc:'전설. 측면 돌파 + 공격 대상 주변의 적에게도 50% 피해.'},
+  warden:{name:'성벽 수호자',icon:'🏰',tier:3,legend:true,cost:120,hp:360,atk:16,def:20,range:1,atkCd:4,moveCd:3,taunt:true,aura:true,
+    desc:'전설. 도발 + 주변 아군이 받는 피해 -15%.'}
+};
+const LEGENDS = {
+  dragoon:{stat:'cavalryKills',need:8,label:'기병 누적 처치'},
+  warden:{stat:'shieldBlocked',need:800,label:'방패병 누적 방어량'}
+};
+const TRAITS = {
+  ironwall:{name:'철벽',desc:'방어력 +15%',how:'앞열에서 3전투 연속 생존'},
+  hunter:{name:'사냥꾼',desc:'사거리 안에서 체력이 가장 낮은 적을 노림',how:'한 전투에서 3명 처치'},
+  undying:{name:'불굴',desc:'전투마다 한 번, 쓰러질 피해를 체력 1로 버팀',how:'체력 15% 이하로 몰린 뒤 생존'},
+  bond:{name:'전우애',desc:'전우와 붙어 배치하면 공격력 +10%',how:'같은 동료와 4전투 붙어서 배치'}
+};
+const CONDITIONS = {
+  clear:{name:'맑음',icon:'☀️',desc:'특별한 효과 없음'},
+  rain:{name:'비',icon:'🌧️',desc:'궁병 사거리 -1'},
+  hill:{name:'언덕',icon:'⛰️',desc:'양쪽 모두 뒤 2열의 공격력 +20%'},
+  fog:{name:'안개',icon:'🌫️',desc:'적 앞열만 정찰할 수 있음'}
+};
+/* 적 편성: [유닛, 행(0~2), 열(0=앞열 ~ 3=뒷열)] */
+const COMPS = {
+  easy:[
+    [['infantry',0,0],['infantry',2,0],['archer',1,1]],
+    [['shield',1,0],['archer',0,1],['archer',2,1]],
+    [['infantry',0,0],['infantry',1,0],['infantry',2,0]]
+  ],
+  mid:[
+    [['shield',1,0],['infantry',0,0],['cavalry',2,1],['archer',1,2]],
+    [['cavalry',0,0],['cavalry',2,0],['archer',1,1],['archer',1,2]],
+    [['spear',0,0],['shield',1,0],['spear',2,0],['medic',1,2],['archer',0,2]]
+  ],
+  hard:[
+    [['shield',0,0],['shield',2,0],['infantry',1,0],['cavalry',0,1],['archer',1,2],['medic',2,2]],
+    [['cavalry',0,0],['cavalry',1,0],['cavalry',2,0],['archer',0,2],['archer',2,2],['infantry',1,1]]
+  ],
+  boss:[
+    [['warden',1,0],['infantry',0,0],['infantry',2,0],['archer',0,2],['archer',2,2]]
+  ]
+};
+const NODE_INFO = {
+  battle:{name:'전투',icon:'⚔️',gold:40,renown:8},
+  elite:{name:'정예 전투',icon:'💀',gold:65,renown:14},
+  supply:{name:'보급 기지',icon:'🏕️',gold:30,renown:0},
+  boss:{name:'보스: 흑기사 군단',icon:'👑',gold:100,renown:25}
+};
+const NAMES = ['도윤','서준','하준','지호','민재','은우','시우','유준','건우','우진','서연','하은','지아','수아','윤서',
+  '채원','지민','다은','예린','소율','태오','이안','로운','한결','바다','하람','가온','누리','다온','마루','별','솔'];
+const STAGES = 6, MAX_TICKS = 160, ROSTER_MAX = 12, SAVE_KEY = 'legion-chronicle-v1';
+
+/* ============ 상태 ============ */
+let state = null;
+let ui = {selected:null, notice:'', playToken:0, fast:false, inherit:null};
+
+function newState(){
+  const s = {chapter:1, stage:1, gold:60, renown:0, nextId:1, units:[], placement:{}, choices:[], current:null,
+    stats:{cavalryKills:0, shieldBlocked:0, wins:0, losses:0}, legendsSummoned:{}};
+  state = s;
+  ['infantry','infantry','shield','archer'].forEach(t => addUnit(t));
+  s.choices = genChoices();
+  return s;
+}
+function addUnit(type){
+  const used = new Set(state.units.map(u=>u.name));
+  const pool = NAMES.filter(n=>!used.has(n));
+  const name = pool.length ? pool[Math.floor(Math.random()*pool.length)] : '병사'+state.nextId;
+  const u = {id:state.nextId++, type, name, lv:1, exp:0, traits:[], frontStreak:0, bondCounts:{}, bondWith:[], rest:0, totalKills:0};
+  state.units.push(u);
+  return u;
+}
+function save(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify(state)); }catch(e){} }
+function load(){ try{ const s = JSON.parse(localStorage.getItem(SAVE_KEY)); return s && s.units ? s : null; }catch(e){ return null; } }
+function clearSave(){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} }
+
+const tierOf = r => r>=90 ? 3 : r>=30 ? 2 : 1;
+const TIER_AT = {1:0, 2:30, 3:90};
+const capOf = () => 4 + tierOf(state.renown);
+const lvMult = lv => 1 + 0.15*(lv-1);
+const expNeed = lv => 20*lv;
+const unitById = id => state.units.find(u=>u.id===id);
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const shuffle = a => a.map(v=>[Math.random(),v]).sort((x,y)=>x[0]-y[0]).map(v=>v[1]);
+
+function genChoices(){
+  const conds = Object.keys(CONDITIONS);
+  if(state.stage === STAGES) return [{kind:'boss', comp:COMPS.boss[0], cond:pick(['clear','rain','hill'])}];
+  const lvl = state.stage<=2 ? 'easy' : state.stage<=4 ? 'mid' : 'hard';
+  const up = {easy:'mid', mid:'hard', hard:'hard'}[lvl];
+  const comps = shuffle(COMPS[lvl]);
+  const out = [{kind:'battle', comp:comps[0], cond:pick(conds)}];
+  const kinds = state.stage===1 ? ['battle'] : ['battle','elite','supply'];
+  const k = pick(kinds);
+  if(k==='battle') out.push({kind:'battle', comp:comps[1]||comps[0], cond:pick(conds)});
+  else if(k==='elite') out.push({kind:'elite', comp:pick(COMPS[up]), cond:pick(conds)});
+  else out.push({kind:'supply'});
+  return out;
+}
+function enemyMult(node){
+  let m = 1 + 0.06*(state.stage-1) + 0.4*(state.chapter-1);
+  if(node.kind==='elite') m *= 1.15;
+  return m;
+}
+
+/* ============ 전투 시뮬레이션 ============ */
+const dist = (a,b) => Math.max(Math.abs(a.r-b.r), Math.abs(a.c-b.c));
+
+function makeC(id, side, type, name, r, c, mult, unit){
+  const t = TYPES[type];
+  const traits = unit ? unit.traits.slice() : [];
+  return {id, side, uid:unit?unit.id:null, lv:unit?unit.lv:0, type, t, name, r, c, sr:r, sc:c,
+    maxHp:Math.round(t.hp*mult), hp:Math.round(t.hp*mult), atk:t.atk*mult, heal:(t.heal||0)*mult,
+    def:t.def*(traits.includes('ironwall')?1.15:1), range:t.range, cdA:1+(id%2), cdM:0,
+    traits, bondWith:unit?unit.bondWith.slice():[], atkMult:1, takenMult:1, defAdd:0,
+    undyingUsed:false, dmg:0, blocked:0, healed:0, kills:0, wasLow:false, dead:false};
+}
+
+function buildCombatants(node, placement){
+  const cs = []; let id = 0;
+  for(const [uid,pos] of Object.entries(placement)){
+    const u = unitById(+uid);
+    if(!u || u.rest>0) continue;
+    cs.push(makeC(id++, 'P', u.type, u.name, pos.r, pos.c, lvMult(u.lv), u));
+  }
+  const m = enemyMult(node);
+  node.comp.forEach(([type,r,c]) => {
+    const nm = (node.kind==='boss' && TYPES[type].legend) ? '흑기사' : '적 '+TYPES[type].name;
+    cs.push(makeC(id++, 'E', type, nm, r, 4+c, m, null));
+  });
+  if(node.cond==='rain') cs.forEach(c=>{ if(c.t.ranged) c.range -= 1; });
+  return cs;
+}
+
+/* 배치 효과: 전투 시작 시 위치로 결정 */
+function applyEffects(cs, cond){
+  const out = {P:[], E:[]};
+  const at = (side,r,c) => cs.find(x=>x.side===side && x.r===r && x.c===c);
+  for(const u of cs){
+    const dir = u.side==='P' ? 1 : -1;
+    const who = u.side==='P' ? `${u.name}(${u.t.name})` : u.name;
+    const ahead = at(u.side, u.r, u.c+dir);
+    if((u.t.ranged || u.t.heal) && ahead && ahead.t.taunt){
+      u.takenMult *= 0.7; out[u.side].push(`🛡️ 방패 엄호: ${who} 받는 피해 -30%`);
+    }
+    if(u.type==='infantry' || u.type==='spear'){
+      const n = [[1,0],[-1,0],[0,1],[0,-1]].some(([dr,dc])=>{ const o=at(u.side,u.r+dr,u.c+dc); return o && (o.type==='infantry'||o.type==='spear'); });
+      if(n){ u.defAdd += 4; out[u.side].push(`🧱 밀집 대형: ${who} 방어 +4`); }
+    }
+    const nb = cs.filter(o=>o!==u && o.side===u.side && dist(o,u)<=1);
+    if(nb.some(o=>o.t.aura)){ u.takenMult *= 0.85; out[u.side].push(`🏰 수호의 오라: ${u.name} 받는 피해 -15%`); }
+    if(u.traits.includes('bond') && nb.some(o=>u.bondWith.includes(o.uid))){
+      u.atkMult *= 1.1; out[u.side].push(`🤝 전우애: ${u.name} 공격력 +10%`);
+    }
+    if(cond==='hill' && ((u.side==='P' && u.c<=1) || (u.side==='E' && u.c>=6))){
+      u.atkMult *= 1.2; out[u.side].push(`⛰️ 언덕 고지: ${u.name} 공격력 +20%`);
+    }
+  }
+  for(const side of ['P','E']){
+    const front = side==='P' ? 3 : 4, second = side==='P' ? 2 : 5;
+    const fr = [0,1,2].map(r=>at(side,r,front));
+    if(fr.every(Boolean)){ fr.forEach(u=>u.defAdd+=5); out[side].push('📏 일자진: 앞열 3칸을 모두 채워 앞열 방어 +5'); }
+    if(at(side,1,front) && at(side,0,second) && at(side,2,second) && !fr.every(Boolean)){
+      cs.filter(u=>u.side===side).forEach(u=>u.atkMult*=1.1);
+      out[side].push('🔺 쐐기진: 앞열 가운데 + 둘째 열 양 끝 배치로 전원 공격력 +10%');
+    }
+  }
+  return out;
+}
+
+function simulate(node, placement){
+  const cs = buildCombatants(node, placement);
+  applyEffects(cs, node.cond);
+  const falls = [], frames = [];
+  let hits = [], tick = 0;
+  const alive = side => cs.filter(x=>!x.dead && x.side===side);
+  const occupied = (r,c) => cs.some(x=>!x.dead && x.r===r && x.c===c);
+  const snap = () => frames.push({units:cs.map(x=>({id:x.id,r:x.r,c:x.c,hp:x.hp,dead:x.dead})), hits});
+  const nearest = (u,list) => list.slice().sort((a,b)=>dist(u,a)-dist(u,b) || Math.abs(u.r-a.r)-Math.abs(u.r-b.r) || a.hp-b.hp)[0];
+
+  function pickTarget(u, foes){
+    const inR = foes.filter(f=>dist(u,f)<=u.range);
+    const taunt = foes.filter(f=>f.t.taunt && dist(u,f)<=1);
+    if(taunt.length) return nearest(u,taunt);
+    if(u.traits.includes('hunter') && inR.length) return inR.slice().sort((a,b)=>a.hp-b.hp)[0];
+    if(u.t.flank){ const soft = foes.filter(f=>f.t.ranged||f.t.heal); if(soft.length) return nearest(u,soft); }
+    return nearest(u,foes);
+  }
+  function moveToward(u, tgt){
+    let best=null, bd=dist(u,tgt), bm=Math.abs(u.r-tgt.r)+Math.abs(u.c-tgt.c);
+    for(let dr=-1; dr<=1; dr++) for(let dc=-1; dc<=1; dc++){
+      if(!dr && !dc) continue;
+      const r=u.r+dr, c=u.c+dc;
+      if(r<0||r>2||c<0||c>7||occupied(r,c)) continue;
+      const d=Math.max(Math.abs(r-tgt.r),Math.abs(c-tgt.c)), m=Math.abs(r-tgt.r)+Math.abs(c-tgt.c);
+      if(d<bd || (d===bd && m<bm)){ best=[r,c]; bd=d; bm=m; }
+    }
+    if(!best) return false;
+    [u.r,u.c] = best; u.cdM = u.t.moveCd; return true;
+  }
+  function damage(u, f, scale){
+    let raw = u.atk*u.atkMult*scale;
+    if(u.t.antiCav && f.t.flank) raw *= 2;
+    const fin0 = raw*100/(100+(f.def+f.defAdd)*4)*f.takenMult;
+    f.blocked += raw-fin0;
+    let fin = Math.max(1, Math.round(fin0));
+    if(f.hp-fin<=0 && f.traits.includes('undying') && !f.undyingUsed){ f.undyingUsed=true; fin=f.hp-1; }
+    f.hp -= fin; u.dmg += fin; hits.push({to:f.id, amt:fin});
+    if(f.hp>0 && f.hp<=f.maxHp*0.15) f.wasLow = true;
+    if(f.hp<=0){ f.hp=0; f.dead=true; u.kills++; falls.push({id:f.id, by:u.id, tick}); }
+  }
+  function attack(u, tgt){
+    u.cdA = u.t.atkCd;
+    damage(u, tgt, 1);
+    if(u.t.cleave) cs.filter(f=>!f.dead && f.side!==u.side && f!==tgt && dist(f,tgt)<=1).forEach(f=>damage(u,f,0.5));
+  }
+  function act(u){
+    const foes = cs.filter(x=>!x.dead && x.side!==u.side);
+    if(!foes.length) return;
+    if(u.t.heal){
+      const hurt = cs.filter(x=>!x.dead && x.side===u.side && x.hp<x.maxHp).sort((a,b)=>a.hp/a.maxHp-b.hp/b.maxHp);
+      if(!hurt.length) return;
+      const tg = hurt.find(x=>dist(u,x)<=u.range) || hurt[0];
+      if(dist(u,tg)<=u.range){
+        if(u.cdA<=0){ const amt=Math.round(Math.min(u.heal, tg.maxHp-tg.hp)); tg.hp+=amt; u.healed+=amt; u.cdA=u.t.atkCd; hits.push({to:tg.id, amt, heal:true}); }
+      } else if(u.cdM<=0) moveToward(u, tg);
+      return;
+    }
+    const tgt = pickTarget(u, foes);
+    if(dist(u,tgt)<=u.range){ if(u.cdA<=0) attack(u,tgt); return; }
+    if(u.cdM<=0 && moveToward(u,tgt)) return;
+    const inR = foes.filter(f=>dist(u,f)<=u.range);
+    if(inR.length && u.cdA<=0) attack(u, nearest(u,inR));
+  }
+
+  snap();
+  for(tick=1; tick<=MAX_TICKS; tick++){
+    hits = [];
+    let order = cs.filter(x=>!x.dead);
+    if(tick%2) order.reverse();
+    for(const u of order){ if(u.dead) continue; u.cdA--; u.cdM--; act(u); }
+    snap();
+    if(!alive('P').length || !alive('E').length) break;
+  }
+  return {win: alive('P').length>0 && !alive('E').length, cs, frames, falls};
+}
+
+/* ============ 전투 결과 반영 ============ */
+function applyResult(res, node){
+  const rep = {win:res.win, notes:[], gold:0, renown:0};
+  const info = NODE_INFO[node.kind];
+  const P = res.cs.filter(c=>c.side==='P');
+  const tierBefore = tierOf(state.renown);
+  state.units.forEach(u=>{ if(u.rest>0) u.rest--; });
+
+  for(const c of P){
+    const u = unitById(c.uid); if(!u) continue;
+    u.totalKills += c.kills;
+    if(u.lv<5){
+      u.exp += 10 + (res.win?10:0) + c.kills*5;
+      while(u.lv<5 && u.exp>=expNeed(u.lv)){ u.exp-=expNeed(u.lv); u.lv++; state.renown+=2; rep.renown+=2; rep.notes.push(`⬆️ ${u.name}(${TYPES[u.type].name}) Lv${u.lv} 달성`); }
+      if(u.lv===5) u.exp = 0;
+    }
+    const grant = k => { if(!u.traits.includes(k)){ u.traits.push(k); rep.notes.push(`🎖️ ${u.name}(${TYPES[u.type].name}) 특성 획득: [${TRAITS[k].name}] ${TRAITS[k].desc}`); } };
+    if(c.sc===3 && !c.dead){ u.frontStreak++; if(u.frontStreak>=3) grant('ironwall'); } else u.frontStreak=0;
+    if(c.kills>=3) grant('hunter');
+    if(c.wasLow && !c.dead) grant('undying');
+    if(c.type==='cavalry') state.stats.cavalryKills += c.kills;
+    if(c.type==='shield') state.stats.shieldBlocked += Math.round(c.blocked);
+    if(c.dead){ u.rest = 1; }
+  }
+  for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++){
+    const a=P[i], b=P[j];
+    if(Math.max(Math.abs(a.sr-b.sr),Math.abs(a.sc-b.sc))>1) continue;
+    const ua=unitById(a.uid), ub=unitById(b.uid);
+    ua.bondCounts[ub.id]=(ua.bondCounts[ub.id]||0)+1; ub.bondCounts[ua.id]=(ub.bondCounts[ua.id]||0)+1;
+    if(ua.bondCounts[ub.id]>=4 && !ua.bondWith.includes(ub.id)){
+      ua.bondWith.push(ub.id); ub.bondWith.push(ua.id);
+      [ua,ub].forEach(x=>{ if(!x.traits.includes('bond')) x.traits.push('bond'); });
+      rep.notes.push(`🤝 ${ua.name}·${ub.name} 전우애 형성: 붙어서 배치하면 공격력 +10%`);
+    }
+  }
+  if(res.win){
+    rep.gold = info.gold; rep.renown += info.renown; state.renown += info.renown; state.stats.wins++;
+  } else { rep.gold = 10; state.stats.losses++; }
+  state.gold += rep.gold;
+  const tierAfter = tierOf(state.renown);
+  if(tierAfter>tierBefore) rep.notes.push(`⭐ 군단 명성 ${tierAfter}단계! 배치 정원 ${capOf()}명, 새 병과 모병 가능`);
+  for(const [k,L] of Object.entries(LEGENDS)){
+    if(!state.legendsSummoned[k] && legendReady(k) && !rep.notes.some(n=>n.includes(TYPES[k].name)))
+      if(tierAfter>=3) rep.notes.push(`🌟 전설 유닛 ${TYPES[k].name} 소환 조건 달성!`);
+  }
+  for(const id of Object.keys(state.placement)){ const u=unitById(+id); if(!u || u.rest>0) delete state.placement[id]; }
+  rep.analysis = analyze(res);
+  rep.cs = res.cs;
+  if(res.win){
+    if(node.kind==='boss'){ rep.chapterClear = true; state.chapter++; state.stage = 1; }
+    else state.stage++;
+    state.current = null;
+    state.choices = genChoices();
+  }
+  save();
+  return rep;
+}
+function legendReady(k){ const L=LEGENDS[k]; return tierOf(state.renown)>=3 && state.stats[L.stat]>=L.need; }
+
+function analyze(res){
+  const P = res.cs.filter(c=>c.side==='P'), E = res.cs.filter(c=>c.side==='E');
+  if(res.win){
+    const mvp = P.slice().sort((a,b)=>(b.dmg+b.healed)-(a.dmg+a.healed))[0];
+    return mvp ? `🏅 MVP: ${mvp.name}(${mvp.t.name}) — ${mvp.t.heal?'치유 '+mvp.healed:'피해 '+mvp.dmg}` : '';
+  }
+  const first = res.falls.find(f=>res.cs[f.id].side==='P');
+  const lines = [];
+  if(first){
+    const v=res.cs[first.id], k=res.cs[first.by];
+    lines.push(`가장 먼저 쓰러진 아군: ${v.name}(${v.t.name}) — ${k.name}의 공격`);
+    if((v.t.ranged||v.t.heal) && k.t.flank) lines.push('💡 적 기병이 측면을 돌아 후방을 노렸습니다. 원거리 유닛 바로 앞에 방패병을 두거나, 창병을 옆에 배치해 막아 보세요.');
+  }
+  const byType = {}; E.forEach(e=>byType[e.t.name]=(byType[e.t.name]||0)+e.dmg);
+  const top = Object.entries(byType).sort((a,b)=>b[1]-a[1])[0];
+  const medic = E.find(e=>e.t.heal && !e.dead && e.healed>60);
+  if(lines.length<2){
+    if(medic) lines.push('💡 적 의무병이 전선을 계속 회복시켰습니다. 기병으로 의무병을 먼저 노려 보세요.');
+    else if(top && top[0]==='궁병') lines.push('💡 적 궁병의 화력이 강했습니다. 일자진으로 앞열을 단단히 하거나, 기병으로 적 궁병을 노려 보세요.');
+    else lines.push('💡 전력이 부족했습니다. 모병소에서 병력을 보충하거나 엄호·밀집·진형 효과를 더 활용해 보세요.');
+  }
+  return lines.join('\n');
+}
+
+/* ============ 화면 도우미 ============ */
+const app = document.getElementById('app');
+function h(tag, props, ...kids){
+  const e = document.createElement(tag);
+  for(const [k,v] of Object.entries(props||{})){
+    if(v==null || v===false) continue;
+    if(k==='class') e.className = v;
+    else if(k==='text') e.textContent = v;
+    else if(k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v===true ? '' : v);
+  }
+  for(const c of kids.flat()){ if(c==null || c===false) continue; e.append(c instanceof Node ? c : document.createTextNode(String(c))); }
+  return e;
+}
+function show(...nodes){
+  ui.playToken++;
+  app.replaceChildren(...nodes);
+  const t = app.querySelector('h2'); if(t){ t.setAttribute('tabindex','-1'); t.focus({preventScroll:true}); }
+  window.scrollTo(0,0);
+}
+function hud(){
+  const tier = tierOf(state.renown);
+  const next = TIER_AT[tier+1];
+  const pct = next ? Math.min(100, (state.renown-TIER_AT[tier])/(next-TIER_AT[tier])*100) : 100;
+  return h('header',{class:'hud'},
+    h('h1',{text:'⚔️ 군단 연대기'}),
+    h('div',{class:'stats'},
+      h('span',{text:`제${state.chapter}장 · ${state.stage}/${STAGES}단계`}),
+      h('span',{class:'gold', text:`💰 ${state.gold}`}),
+      h('span',{class:'row', style:'gap:6px'}, `⭐ 명성 ${state.renown} (${tier}단계)`,
+        h('span',{class:'bar', role:'progressbar', 'aria-label':'다음 명성 단계까지', 'aria-valuemin':0, 'aria-valuemax':100, 'aria-valuenow':Math.round(pct)}, h('i',{style:`width:${pct}%`})))
+    ));
+}
+function token(c, opts={}){
+  const t = TYPES[c.type];
+  const pct = Math.max(0, c.hp/c.maxHp*100);
+  return h('span',{class:`tok ${c.side}${c.dead?' dead':''}${opts.hit?' hit':''}${opts.heal?' heal':''}`, 'aria-hidden':'true'},
+    opts.lv ? h('span',{class:'lv', text:'Lv'+opts.lv}) : null,
+    h('span',{class:'ico', text:t.icon}),
+    h('span',{class:'hp'}, h('i',{style:`width:${pct}%`})),
+    opts.pop ? h('span',{class:'pop'+(opts.heal?' h':''), text:(opts.heal?'+':'-')+opts.pop}) : null);
+}
+function boardLabels(){
+  return h('div',{class:'lbl','aria-hidden':'true'}, h('span',{text:'아군  (뒤 ← → 앞)'}), h('span'), h('span',{text:'(앞 ← → 뒤)  적군'}));
+}
+function cellLabel(c){ return c==null ? '비어 있음' : `${c.name} ${c.t.name}${c.lv?' Lv'+c.lv:''}, 체력 ${c.hp}/${c.maxHp}`; }
+
+/* ============ 화면: 타이틀 ============ */
+function screenTitle(){
+  const saved = load();
+  show(h('section',{class:'card', style:'text-align:center'},
+    h('h2',{style:'font-size:26px', text:'⚔️ 군단 연대기'}),
+    h('p',{class:'muted', text:'나만의 부대를 키우고, 배치로 승패를 가르는 오토배틀 전략 게임'}),
+    h('ul',{style:'text-align:left;max-width:420px;margin:12px auto'},
+      h('li',{text:'전투는 자동으로 진행됩니다. 이기고 지는 것은 배치에 달려 있습니다.'}),
+      h('li',{text:'병사는 전투에서 한 일에 따라 레벨과 특성을 얻습니다.'}),
+      h('li',{text:'군단 명성과 공적을 쌓으면 전설 유닛을 소환할 수 있습니다.'})),
+    h('div',{class:'row', style:'justify-content:center;margin-top:14px'},
+      saved ? h('button',{class:'btn primary', onclick:()=>{ state=saved; screenCamp(); }, text:`이어하기 (제${saved.chapter}장 ${saved.stage}단계)`}) : null,
+      h('button',{class:saved?'btn':'btn primary', onclick:()=>{
+        if(saved && !confirm('저장된 진행 상황을 지우고 새로 시작할까요?')) return;
+        clearSave(); newState(); save(); ui.notice='새 캠페인을 시작했습니다. 첫 전투를 골라 보세요!'; screenCamp(); }, text:'새 캠페인'}))));
+}
+
+/* ============ 화면: 병영 (작전 지도 / 부대 / 모병소) ============ */
+function screenCamp(){
+  const track = h('div',{class:'track', 'aria-label':`진행도 ${state.stage}/${STAGES}단계`, role:'img'},
+    Array.from({length:STAGES},(_,i)=>h('span',{class: i+1<state.stage?'done':i+1===state.stage?'now':''})));
+  const choiceBtns = state.choices.map(node=>{
+    const info = NODE_INFO[node.kind];
+    if(node.kind==='supply') return h('button',{class:'btn choice', onclick:()=>doSupply()},
+      h('span',{class:'ti', text:`${info.icon} ${info.name}`}),
+      h('span',{class:'d', text:'모든 부상병 회복 + 💰30. 전투 없이 다음 단계로'}));
+    const cond = CONDITIONS[node.cond];
+    return h('button',{class:'btn choice', onclick:()=>{ state.current=node; save(); screenDeploy(); }},
+      h('span',{class:'ti', text:`${info.icon} ${info.name}`}),
+      h('span',{class:'d', text:`${cond.icon} ${cond.name}: ${cond.desc}`}),
+      h('span',{class:'d', text:`적 ${node.comp.length}명 · 보상 💰${info.gold} ⭐${info.renown}`}));
+  });
+
+  const units = state.units.map(u=>{
+    const t = TYPES[u.type];
+    return h('div',{class:'unit'},
+      h('div',{class:'spread'}, h('span',{}, h('span',{class:'ic','aria-hidden':'true', text:t.icon}), h('span',{class:'nm', text:u.name}), ` ${t.name}`),
+        h('span',{class:'small', text:`Lv${u.lv}`})),
+      u.lv<5 ? h('div',{class:'bar', role:'progressbar','aria-label':`${u.name} 경험치`,'aria-valuemin':0,'aria-valuemax':expNeed(u.lv),'aria-valuenow':u.exp, style:'margin:6px 0'},
+        h('i',{style:`width:${u.exp/expNeed(u.lv)*100}%`})) : h('div',{class:'small muted', text:'최대 레벨'}),
+      h('div',{}, u.rest>0 ? h('span',{class:'chip warn', text:'🩹 부상: 다음 전투 휴식'}) : null,
+        u.traits.map(k=>h('span',{class:'chip trait', title:TRAITS[k].desc, text:TRAITS[k].name}))),
+      h('div',{class:'small muted', text:`누적 처치 ${u.totalKills}`}));
+  });
+
+  const tier = tierOf(state.renown);
+  const recruits = Object.entries(TYPES).map(([k,t])=>{
+    let lockMsg = null, can = state.gold>=t.cost && state.units.length<ROSTER_MAX;
+    if(t.legend){
+      const L = LEGENDS[k];
+      if(state.legendsSummoned[k]){ lockMsg='이미 소환함'; can=false; }
+      else if(!legendReady(k)){ lockMsg=`조건: 명성 3단계 (현재 ${tier}) · ${L.label} ${Math.min(state.stats[L.stat],L.need)}/${L.need}`; can=false; }
+    } else if(t.tier>tier){ lockMsg=`명성 ${t.tier}단계에 해금`; can=false; }
+    return h('div',{class:'rc'},
+      h('span',{class:'ic','aria-hidden':'true', text:t.icon}),
+      h('div',{class:'info'}, h('strong',{text:t.name + (t.legend?' ★':'')}), h('div',{class:'small muted', text:t.desc}),
+        lockMsg ? h('div',{class:'legend-note', text:'🔒 '+lockMsg}) : null),
+      h('button',{class:'btn', disabled:!can, 'aria-label':`${t.name} 모병, 금화 ${t.cost}`, onclick:()=>recruit(k), text:`💰${t.cost}`}));
+  });
+
+  const inheritPanel = ui.inherit ? inheritUI(ui.inherit) : null;
+
+  show(hud(),
+    h('div',{class:'notice', role:'status', text:ui.notice}),
+    h('section',{class:'card'}, h('h2',{text:'🗺️ 작전 지도'}), track,
+      h('p',{class:'muted small', text: state.stage===STAGES ? '마지막 단계입니다. 보스를 물리치면 다음 장으로 넘어갑니다.' : '다음으로 향할 곳을 고르세요.'}),
+      h('div',{class:'choices'}, choiceBtns)),
+    inheritPanel,
+    h('section',{class:'card'}, h('h2',{text:`🏕️ 부대 현황 (${state.units.length}/${ROSTER_MAX})`}), h('div',{class:'units'}, units),
+      h('h3',{text:'특성 얻는 법'}),
+      h('ul',{class:'effects small'}, Object.values(TRAITS).map(t=>h('li',{text:`${t.name}: ${t.how} → ${t.desc}`})))),
+    h('section',{class:'card'}, h('h2',{text:'📯 모병소'}),
+      h('p',{class:'small muted', text:`배치 정원 ${capOf()}명 · 명성이 오르면 정원과 병과가 늘어납니다.`}),
+      h('div',{class:'recruit'}, recruits)),
+    h('div',{class:'row'}, h('button',{class:'btn', onclick:screenTitle, text:'타이틀로'})));
+  ui.notice = '';
+}
+function doSupply(){
+  state.units.forEach(u=>u.rest=0);
+  state.gold += NODE_INFO.supply.gold;
+  state.stage++; state.choices = genChoices(); save();
+  ui.notice = '🏕️ 보급 기지에서 쉬었습니다. 부상병이 모두 회복했고 💰30을 얻었습니다.';
+  screenCamp();
+}
+function recruit(type){
+  const t = TYPES[type];
+  if(t.legend){ ui.inherit = type; screenCamp(); return; }
+  if(state.gold<t.cost) return;
+  state.gold -= t.cost;
+  const u = addUnit(type); save();
+  ui.notice = `📯 새 병사 합류: ${u.name}(${t.name})`;
+  screenCamp();
+}
+function inheritUI(type){
+  const t = TYPES[type];
+  const vets = state.units.filter(u=>u.lv>=3 && u.traits.length);
+  const finish = (vet, trait) => {
+    state.gold -= t.cost;
+    const nu = addUnit(type);
+    state.legendsSummoned[type] = true;
+    if(vet){
+      state.units = state.units.filter(u=>u.id!==vet.id);
+      delete state.placement[vet.id];
+      state.units.forEach(u=>{ u.bondWith = u.bondWith.filter(id=>id!==vet.id); if(!u.bondWith.length) u.traits = u.traits.filter(k=>k!=='bond'); });
+      if(trait!=='bond') nu.traits.push(trait);
+      ui.notice = `🌟 ${vet.name} 전역 — [${TRAITS[trait].name}] 특성 계승. 전설의 ${t.name} ${nu.name} 소환!`;
+    } else ui.notice = `🌟 전설의 ${t.name} ${nu.name} 소환!`;
+    ui.inherit = null; save(); screenCamp();
+  };
+  const opts = [];
+  vets.forEach(v=>v.traits.filter(k=>k!=='bond').forEach(k=>opts.push(
+    h('button',{class:'btn', onclick:()=>finish(v,k)}, `${TYPES[v.type].icon} ${v.name} Lv${v.lv} 전역 → [${TRAITS[k].name}] 계승`))));
+  return h('section',{class:'card'},
+    h('h2',{text:`🌟 ${t.name} 소환 — 계승`}),
+    h('p',{class:'small', text:'Lv3 이상 베테랑을 전역시키면 그 병사의 특성 하나를 전설 유닛에게 물려줄 수 있습니다. 전역한 병사는 부대를 떠납니다. (전우애는 계승할 수 없음)'}),
+    h('div',{class:'row'}, opts.length ? opts : h('span',{class:'muted small', text:'계승할 수 있는 베테랑이 없습니다.'})),
+    h('div',{class:'row', style:'margin-top:10px'},
+      h('button',{class:'btn primary', onclick:()=>finish(null), text:`계승 없이 소환 (💰${t.cost})`}),
+      h('button',{class:'btn', onclick:()=>{ ui.inherit=null; screenCamp(); }, text:'취소'})));
+}
+
+/* ============ 화면: 배치 ============ */
+function placedCount(){ return Object.keys(state.placement).length; }
+function screenDeploy(){
+  const node = state.current;
+  const info = NODE_INFO[node.kind], cond = CONDITIONS[node.cond];
+  for(const id of Object.keys(state.placement)){ const u=unitById(+id); if(!u || u.rest>0) delete state.placement[id]; }
+  const cs = buildCombatants(node, state.placement);
+  const eff = applyEffects(cs, node.cond);
+  const at = (side,r,c) => cs.find(x=>x.side===side && x.r===r && x.c===c);
+
+  const cells = [];
+  for(let r=0;r<3;r++){
+    for(let c=0;c<4;c++){
+      const o = at('P',r,c);
+      const sel = o && o.uid===ui.selected;
+      cells.push(h('button',{class:`cell${c===3?' front':''}${sel?' sel':''}`,
+        'aria-label':`아군 ${r+1}행 ${c+1}열${c===3?' 앞열':''}: ${o?cellLabel(o):'비어 있음'}`,
+        onclick:()=>clickCell(r,c)}, o ? token(o,{lv:o.lv}) : null));
+    }
+    cells.push(h('span',{'aria-hidden':'true'}));
+    for(let c=4;c<8;c++){
+      const o = at('E',r,c);
+      const hidden = node.cond==='fog' && c>4;
+      cells.push(h('div',{class:`cell${c===4?' front':''}${hidden?' hidden':''}`, role:'img',
+        'aria-label':`적군 ${r+1}행 ${c-3}열${c===4?' 앞열':''}: ${hidden?'안개로 보이지 않음':o?cellLabel(o):'비어 있음'}`},
+        o && !hidden ? token(o) : null));
+    }
+  }
+  const cap = capOf();
+  const picks = state.units.map(u=>{
+    const t = TYPES[u.type], placed = !!state.placement[u.id];
+    return h('button',{class:`pick${placed?' placed':''}`, disabled:u.rest>0, 'aria-pressed':String(ui.selected===u.id),
+      'aria-label':`${u.name} ${t.name} Lv${u.lv}${placed?' (배치됨)':''}${u.rest>0?' (부상 휴식)':''}`,
+      onclick:()=>{ ui.selected = ui.selected===u.id ? null : u.id; screenDeploy(); }},
+      h('span',{'aria-hidden':'true', text:t.icon}), `${u.name} Lv${u.lv}`, placed ? ' ✓' : '', u.rest>0 ? ' 🩹' : '');
+  });
+
+  show(hud(),
+    h('section',{class:'card'},
+      h('h2',{text:`${info.icon} ${info.name} — 배치`}),
+      h('p',{class:'small', text:`${cond.icon} ${cond.name}: ${cond.desc}`}),
+      h('p',{class:'small muted', text:'병사를 고른 뒤 왼쪽 아군 칸을 누르세요. 배치된 칸을 누르면 그 병사를 고르고, 다시 누르면 배치를 해제합니다.'}),
+      boardLabels(),
+      h('div',{class:'board'}, cells),
+      h('div',{class:'spread'}, h('strong',{text:`배치 ${placedCount()}/${cap}`}),
+        h('div',{class:'row'},
+          h('button',{class:'btn', onclick:autoPlace, text:'자동 배치'}),
+          h('button',{class:'btn', onclick:()=>{ state.placement={}; ui.selected=null; save(); screenDeploy(); }, text:'모두 해제'}))),
+      h('h3',{text:'병사 선택'}),
+      h('div',{class:'picks'}, picks),
+      h('h3',{text:'배치 효과'}),
+      eff.P.length ? h('ul',{class:'effects'}, eff.P.map(t=>h('li',{text:t})))
+        : h('p',{class:'small muted', text:'아직 발동한 효과가 없습니다. 방패병 바로 뒤에 궁병, 보병끼리 나란히, 앞열 3칸 채우기 등을 시도해 보세요.'}),
+      eff.E.length && node.cond!=='fog' ? h('details',{}, h('summary',{class:'small', text:'적 배치 효과 보기'}), h('ul',{class:'effects small'}, eff.E.map(t=>h('li',{text:t})))) : null),
+    h('div',{class:'row'},
+      h('button',{class:'btn', onclick:()=>{ ui.selected=null; screenCamp(); }, text:'병영으로'}),
+      h('button',{class:'btn primary', disabled:!placedCount(), onclick:startBattle, text:'⚔️ 전투 시작'})));
+}
+function clickCell(r,c){
+  const occ = Object.entries(state.placement).find(([,p])=>p.r===r && p.c===c);
+  const occId = occ ? +occ[0] : null;
+  const sel = ui.selected;
+  if(sel==null){ if(occId!=null){ ui.selected = occId; } screenDeploy(); return; }
+  if(occId===sel){ delete state.placement[sel]; ui.selected=null; save(); screenDeploy(); return; }
+  const from = state.placement[sel];
+  if(!from && occId==null && placedCount()>=capOf()){ ui.notice=''; alertMsg(`배치 정원(${capOf()}명)이 가득 찼습니다.`); return; }
+  if(occId!=null){ if(from) state.placement[occId] = {...from}; else delete state.placement[occId]; }
+  state.placement[sel] = {r,c};
+  ui.selected = null; save(); screenDeploy();
+}
+function alertMsg(msg){
+  let s = app.querySelector('.deploy-msg');
+  if(!s){ s = h('p',{class:'notice deploy-msg', role:'alert'}); app.querySelector('.board').after(s); }
+  s.textContent = msg;
+}
+function autoPlace(){
+  state.placement = {};
+  const avail = state.units.filter(u=>u.rest===0).sort((a,b)=>b.lv-a.lv);
+  const frontOrder = ['warden','shield','infantry','spear','dragoon','cavalry'];
+  const melee = avail.filter(u=>!TYPES[u.type].ranged && !TYPES[u.type].heal).sort((a,b)=>frontOrder.indexOf(a.type)-frontOrder.indexOf(b.type));
+  const back = avail.filter(u=>TYPES[u.type].ranged || TYPES[u.type].heal);
+  const frontCells = [[1,3],[0,3],[2,3],[1,2],[0,2],[2,2]], backCells = [[1,2],[1,1],[0,1],[2,1],[1,0],[0,0],[2,0]];
+  const used = new Set(); const cap = capOf(); let n = 0;
+  const put = (u, list) => { for(const [r,c] of list){ const k=r+','+c; if(!used.has(k)){ used.add(k); state.placement[u.id]={r,c}; n++; return true; } } return false; };
+  const all = [[0,0],[0,1],[0,2],[0,3],[1,0],[1,1],[1,2],[1,3],[2,0],[2,1],[2,2],[2,3]];
+  const queue = [];
+  for(let i=0;i<Math.max(melee.length,back.length);i++){ if(melee[i]) queue.push([melee[i],frontCells]); if(back[i]) queue.push([back[i],backCells]); }
+  for(const [u,list] of queue){ if(n>=cap) break; put(u,list) || put(u,all); }
+  ui.selected = null; save(); screenDeploy();
+}
+
+/* ============ 화면: 전투 ============ */
+function startBattle(){
+  const node = state.current;
+  const res = simulate(node, state.placement);
+  const rep = applyResult(res, node);
+  screenBattle(res, rep, node);
+}
+function screenBattle(res, rep, node){
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const board = h('div',{class:'board','aria-hidden':'true'});
+  const status = h('p',{class:'small', role:'status', 'aria-live':'polite'});
+  const speedBtn = h('button',{class:'btn', 'aria-pressed':String(ui.fast), onclick:()=>{ ui.fast=!ui.fast; speedBtn.setAttribute('aria-pressed',String(ui.fast)); speedBtn.textContent = ui.fast?'속도: 2배':'속도: 1배'; }, text: ui.fast?'속도: 2배':'속도: 1배'});
+  show(hud(),
+    h('section',{class:'card'},
+      h('h2',{text:`⚔️ 전투 중 — ${CONDITIONS[node.cond].icon} ${CONDITIONS[node.cond].name}`}),
+      boardLabels(), board, status,
+      h('div',{class:'row'}, speedBtn, h('button',{class:'btn primary', onclick:()=>screenReport(rep, node), text:'결과로 건너뛰기'}))));
+  const my = ui.playToken;
+  let i = 0; let lastLive = '';
+  const draw = () => {
+    if(my!==ui.playToken) return;
+    const f = res.frames[i];
+    const byPos = {}; f.units.forEach(u=>{ if(!u.dead) byPos[u.r+','+u.c]=u; });
+    const deadAt = {}; f.units.forEach(u=>{ if(u.dead && !byPos[u.r+','+u.c]) deadAt[u.r+','+u.c]=u; });
+    const hitMap = {}; f.hits.forEach(x=>{ const m=hitMap[x.to]||(hitMap[x.to]={amt:0,heal:false}); m.amt+=x.amt; if(x.heal) m.heal=true; });
+    const cells = [];
+    for(let r=0;r<3;r++) for(let c=0;c<8;c++){
+      if(c===4) cells.push(h('span'));
+      const s = byPos[r+','+c] || deadAt[r+','+c];
+      let tok = null;
+      if(s){ const base=res.cs[s.id]; const hm=hitMap[s.id];
+        tok = token({...base, hp:s.hp, dead:s.dead}, {hit:hm&&!hm.heal&&!reduce, heal:hm&&hm.heal&&!reduce, pop:hm?hm.amt:0}); }
+      cells.push(h('div',{class:`cell${c===3||c===4?' front':''}`}, tok));
+    }
+    board.replaceChildren(...cells);
+    const pa = f.units.filter(u=>!u.dead && res.cs[u.id].side==='P').length;
+    const ea = f.units.filter(u=>!u.dead && res.cs[u.id].side==='E').length;
+    const txt = `아군 ${pa}명 · 적군 ${ea}명`;
+    if(txt!==lastLive){ status.textContent = txt; lastLive = txt; }
+    i++;
+    if(i<res.frames.length) setTimeout(draw, (ui.fast||reduce) ? 90 : 200);
+    else setTimeout(()=>{ if(my===ui.playToken) screenReport(rep, node); }, 900);
+  };
+  draw();
+}
+
+/* ============ 화면: 전투 보고 ============ */
+function screenReport(rep, node){
+  const rows = rep.cs.filter(c=>c.side==='P').map(c=>h('tr',{},
+    h('td',{text:`${c.t.icon} ${c.name} (${c.t.name})`}),
+    h('td',{text:c.dmg}), h('td',{text:Math.round(c.blocked)}), h('td',{text:c.t.heal?`치유 ${c.healed}`:c.kills}),
+    h('td',{text:c.dead?'🩹 쓰러짐':'생존'})));
+  const actions = [];
+  if(rep.chapterClear){
+    actions.push(h('button',{class:'btn primary', onclick:()=>{ ui.notice=`👑 제${state.chapter-1}장 클리어! 제${state.chapter}장이 시작됩니다. 적이 더 강해졌습니다.`; screenCamp(); }, text:`제${state.chapter}장으로`}));
+  } else if(rep.win){
+    actions.push(h('button',{class:'btn primary', onclick:screenCamp, text:'병영으로'}));
+  } else {
+    actions.push(h('button',{class:'btn primary', onclick:screenDeploy, text:'배치 바꿔 재도전'}));
+    actions.push(h('button',{class:'btn', onclick:screenCamp, text:'병영으로'}));
+  }
+  show(hud(),
+    h('section',{class:'card'},
+      h('h2',{class:'big '+(rep.win?'win':'lose'), text: rep.chapterClear ? '👑 장 클리어!' : rep.win ? '🏆 승리!' : '💥 패배'}),
+      h('p',{text:`보상: 💰${rep.gold}${rep.renown?` · ⭐명성 +${rep.renown}`:''}`}),
+      rep.analysis ? h('div',{class:'notice'}, rep.analysis.split('\n').map(l=>h('div',{text:l}))) : null,
+      rep.notes.length ? h('ul',{class:'effects'}, rep.notes.map(n=>h('li',{text:n}))) : null,
+      h('h3',{text:'📜 전투 보고서'}),
+      h('div',{class:'tbl-wrap'}, h('table',{},
+        h('thead',{}, h('tr',{}, ['병사','준 피해','막은 피해','처치','상태'].map(t=>h('th',{scope:'col', text:t})))),
+        h('tbody',{}, rows))),
+      !rep.win ? h('p',{class:'small muted', style:'margin-top:10px', text:'쓰러진 병사는 다음 전투 한 번을 쉬어야 합니다. 패배해도 경험치는 얻습니다.'}) : null),
+    h('div',{class:'row'}, actions));
+}
+
+/* ============ 시작 ============ */
+screenTitle();
+</script>
+</body>
+</html>
