@@ -693,6 +693,7 @@ const CONFIG = {
   body:   { radius: 0.2, ownerStrength: 0.55, block: 0.8, ownerSlow: 0.35, loseTime: 0.7, recover: 1.5, spill: 2.8 },   // 몸싸움: 몸통 반지름(키 배율), 공 가진 선수 힘(1보다 작으면 더 밀림), 붙어서 이 시간(초) 밀리면 공을 흘림
   throwIn: { dist: [4, 15], angle: 28, time: 0.42, keep: 2 },   // 스로인: 던지는 거리(경기장 100 기준, 세기 0%~100% — 패스 최대의 절반), 던지는 각도, 동작 시간, 상대가 떨어져 있는 거리(m)
   kickoffAuto: { wait: 5, maxPower: 0.3 },   // 내 킥오프를 wait 초 안 차면 가까운 동료에게 약한(최대 maxPower) 패스
+  offside: { tol: 0.15 },   // 같은 선으로 봐주는 여유(m)
   poke:   { range: 2.25, reach: 1.15, time: 0.34, hitFrom: 0.07, hitTo: 0.24, slack: 0.06, push: 4.5, cool: 0.45, mateCool: 0.9 },   // 발 뻗어 뺏기: 공까지 거리(m) 안이면 뻗음, 동작 시간, 발 판정이 켜지는 구간, 발 판정 여유, 공이 튕겨 나가는 속도
   gk:     { speed: 6.5, dive: 6.0, reach: 1.1, reactMin: 0.17, reactMax: 0.33, catch: 0.6, hold: 1.1, userHold: 8, carry: 4, punt: [28, 62] },   // userHold: 내 골키퍼가 공을 들고 있을 수 있는 시간, carry: 들고 걷는 속도, punt: 슛 버튼 롱킥 거리
   cpu:    { activeAbove: 4, pokeCool: 0.55, pressRange: 14, slideChance: 0.6, think: 0.3, shootRange: 20, passUrge: 0.1, shotError: 0.15 },
@@ -726,7 +727,7 @@ const ball = {};
 let players = [];
 function resetState(){
   Object.assign(S, { t:0, time:0, score:[0,0], half:1, freeze:0, dead:false, poss:-1, side:0, recv:[null,null],
-    ctrl:null, charge:null, press:false, scorer:-1, pending:null, msgT:0, fk:null });
+    ctrl:null, charge:null, press:false, scorer:-1, pending:null, msgT:0, fk:null, offside:null, offLine:null, restart:null });
   players = [];
   for (let team=0; team<2; team++) FORM.forEach(([hx,hz,role],i) => players.push({
     team, dir: team?-1:1, i, role, gk: role==="GK", hx, hz, x:0, z:0, vx:0, vz:0, a:0, ph:Math.random()*6,
@@ -743,7 +744,7 @@ function kickoff(team){
   S.ctrl = players[9];
   setOwner(k);
   k.x=0.55*k.dir; k.z=0; k.a=k.dir>0?Math.PI:0;                // 키커는 우리 진영(뒤쪽)을 보고 섬. 공은 발 앞
-  S.fk={ p:k, x:0, z:0, a:k.dir>0?Math.PI:0, kickoff:true, px:k.x, pz:k.z, pa:k.a, auto:S.time+1.3+CONFIG.kickoffAuto.wait };   // auto: 내 킥오프를 이 시각까지 안 차면 약하게 자동 패스   // 킥오프: 공은 센터에 가만히, 누가 공을 차기 전까지 아무도 움직이지 못함
+  S.restart="킥오프"; S.fk={ p:k, x:0, z:0, a:k.dir>0?Math.PI:0, kickoff:true, still:true, px:k.x, pz:k.z, pa:k.a, auto:S.time+1.3+CONFIG.kickoffAuto.wait };   // auto: 내 킥오프를 이 시각까지 안 차면 약하게 자동 패스   // 킥오프: 공은 센터에 가만히, 누가 공을 차기 전까지 아무도 움직이지 못함
   k.think=rnd(0.6,1.2);
   S.freeze = 1.3; say("킥오프", 1.2); sfx.whistle();
 }
@@ -862,11 +863,36 @@ function slide(p,dir){
 
 /* ===== 킥 ===== */
 function doKick(p,vx,vy,vz,power){
+  if (S.offside && !ball.owner && offsideOnTouch(p)) return;   // 흘러온 공을 바로 차거나 헤딩·발리: 그 순간이 첫 터치
   if (ball.owner===p && (p.gk || dist(p,ball)>1.8*CONFIG.size.player)){ ball.x=p.x+Math.cos(p.a)*0.6; ball.z=p.z+Math.sin(p.a)*0.6; ball.y=p.gk?0.4:BR; }   // 드리블 중엔 공이 있는 자리에서 그대로 찬다
-  S.fk=null; ball.owner=null; ball.glide=null; ball.cross=null; ball.vx=vx; ball.vy=vy; ball.vz=vz; ball.last=p.team; ballTouch(p,p.gk&&ball.y>0.3?"hand":"foot");
+  offsideOnKick(p); S.fk=null; ball.owner=null; ball.glide=null; ball.cross=null; ball.vx=vx; ball.vy=vy; ball.vz=vz; ball.last=p.team; ballTouch(p,p.gk&&ball.y>0.3?"hand":"foot");
   if (p.gk && S.ctrl===p) switchPlayer();
   p.cool=0.45; p.kickT=0.28; p.a=Math.atan2(vz,vx); p.hold=0; p.volleyLift=0;
   sfx.kick(power??0.5);
+}
+/* ===== 오프사이드 =====
+   동료가 공을 차는 순간(패스·크로스·슛·헤딩 모두) 공격 선수의 위치를 기록 → 그때 오프사이드 위치였던 선수가 다음에 공을 처음 건드리면 반칙.
+   위치 판정은 포즈 관절(머리·몸통·발) 중 상대 골에 가장 가까운 점, 수비 쪽은 뒤에서 두 번째 선수의 가장 뒤 점. 골킥·코너킥·스로인으로 바로 받은 공은 제외 */
+function frontX(p,sign){                                  // sign 방향(+1: +x 쪽 골)으로 가장 앞선 몸 부분의 x(팔·손 제외)
+  const J=p.jw; if (!J) return p.x;
+  let m=-1e9; for (const i of [0,7,8,11,12,23,24,25,26,27,28,29,30,31,32]) m=Math.max(m,J[i].x*sign); return m*sign;
+}
+function offsideOnKick(p){
+  const exempt=S.restart==="골킥"||S.restart==="코너킥"||S.restart==="스로인"; S.restart=null;
+  if (S.offside && S.offside.team!==p.team) S.offside=null;
+  const sign=p.dir, opp=players.filter(q=>q.team!==p.team).map(q=>frontX(q,sign)*sign).sort((a,b)=>b-a);
+  const line=Math.max(opp[1]??-1e9, ball.x*sign, 0), set=new Set();   // 뒤에서 두 번째 수비수·공·하프라인 중 가장 앞
+  if (!exempt) for (const q of players) if (q.team===p.team && q!==p && frontX(q,sign)*sign>line+CONFIG.offside.tol) set.add(q);
+  S.offside={ team:p.team, set, line:line*sign };
+}
+function offsideOnTouch(p){                               // 공을 잡는 순간 판정. 반칙이면 true
+  const o=S.offside; if (!o) return false;
+  if (p.team!==o.team){ S.offside=null; return false; }  // 상대가 공을 가져가면 기록 지움
+  if (!o.set.has(p)){ S.offside=null; return false; }     // 온사이드였던 동료가 받음
+  S.offside=null; S.offLine={ x:o.line, until:S.time+2.2 };
+  ball.owner=null; ball.vx=ball.vz=ball.vy=0;
+  setPiece(1-p.team, clamp(p.x,-HL+1,HL-1), clamp(p.z,-HW+1,HW-1), "오프사이드", false);
+  return true;
 }
 function setRecv(p,m){ S.recv[p.team]=m; if (p.team===0 && !m.gk) S.ctrl=m; }
 function passTo(p,m,v){
@@ -913,7 +939,7 @@ function pickMate(p,ax,az,want,maxDeg,minD){
 function userKick(p,type,power){
   const iv=inputVec(), aimed=iv.m>0.3;
   if (S.fk && S.fk.throw && S.fk.p===p) return throwIn(p,Math.cos(p.a),Math.sin(p.a),power);   // 스로인: 어느 버튼이든 던지기(방향은 키커가 보는 쪽)
-  const fixedAim=S.fk && S.fk.kickoff && S.fk.p===p;      // 킥오프: 조이스틱 대신 우리 진영 쪽으로 제한된 방향
+  const fixedAim=S.fk && S.fk.still && S.fk.p===p;      // 킥오프: 조이스틱 대신 우리 진영 쪽으로 제한된 방향
   const ax=aimed&&!fixedAim?iv.x/iv.m:Math.cos(fixedAim?S.fk.a:p.a), az=aimed&&!fixedAim?iv.z/iv.m:Math.sin(fixedAim?S.fk.a:p.a);
   if (type==="pass"){
     const c=CONFIG.pass, D=(c.dist[0]+(c.dist[1]-c.dist[0])*power)*MS;   // 세기만큼의 거리(최대 경기장 100 기준 30)
@@ -943,7 +969,7 @@ function userKick(p,type,power){
 
 /* ===== 소유 ===== */
 function setOwner(p){
-  if (S.fk && S.fk.p!==p) S.fk=null; ball.owner=p; ball.glide=null; ball.cross=null; ball.last=p.team; S.poss=p.team; ballTouch(p,p.gk?"hand":"foot");
+  if (offsideOnTouch(p)) return; if (S.fk && S.fk.p!==p) S.fk=null; ball.owner=p; ball.glide=null; ball.cross=null; ball.last=p.team; S.poss=p.team; ballTouch(p,p.gk?"hand":"foot");
   if (S.side!==p.team){ S.side=p.team; S.press=0; } S.recv[0]=S.recv[1]=null;
   if (p.team===0) S.ctrl=p;                               // 내 골키퍼가 잡으면 골키퍼를 직접 조작
   if (p.gk) p.hold=p.team===0?CONFIG.gk.userHold:CONFIG.gk.hold;
@@ -1181,6 +1207,7 @@ function goal(team){
   S.pending={ t:2.8, fn:()=>kickoff(1-team) };
 }
 function setPiece(team,x,z,label,byGk){
+  S.restart=label; S.offside=null;
   S.dead=true; S.charge=null; S.press=0; S.air=null; say(label,1.1); sfx.whistle();
   S.pending={ t:0.9, fn:()=>{
     Object.assign(ball,{ x, y:BR, z, vx:0, vy:0, vz:0, owner:null }); ballReset();
@@ -1190,6 +1217,11 @@ function setPiece(team,x,z,label,byGk){
     for (const q of players) if (q.team!==team){ const dx=q.x-x, dz=q.z-z, d=hyp(dx,dz)||1;
       if (d<8){ q.x=clamp(x+dx/d*8,-HL,HL); q.z=clamp(z+dz/d*8,-HW,HW); } }
     S.dead=false; setOwner(taker); S.freeze=0.5;
+    if (label==="오프사이드"){                               // 오프사이드 프리킥: 킥오프처럼 공은 가만히, 누가 차기 전까지 아무도 못 움직임
+      const a=taker.dir>0?0:Math.PI; taker.a=a; taker.x=x-Math.cos(a)*0.55; taker.z=z;
+      S.fk={ p:taker, x, z, a, still:true, freekick:true, px:taker.x, pz:taker.z, pa:a, auto:S.time+0.5+CONFIG.kickoffAuto.wait };
+      taker.think=rnd(0.8,1.4);
+    }
     if (label==="스로인"){                                   // 스로인: 키커가 터치라인 밖에서 공을 머리 위로 들고, 팔로 던진다
       const sg=Math.sign(z)||1, a=Math.atan2(-sg,0);
       S.fk={ p:taker, x, z, a, throw:true, sg }; taker.a=a; taker.x=x; taker.z=sg*(HW+0.05); taker.think=rnd(0.9,1.6);
@@ -1861,7 +1893,7 @@ function stepPlayers(dt){
       p.vx*=1-1.8*dt; p.vz*=1-1.8*dt; if (p.slideT<=0) p.stun=0.4; continue;
     }
     if (p.stun>0){ p.stun-=dt; steer(p,0,0,dt); continue; }
-    if (S.fk && S.fk.kickoff && S.fk.p!==p){ p.vx=p.vz=0; p.run=0; continue; }   // 킥오프 전: 키커 말고는 제자리
+    if (S.fk && S.fk.still && S.fk.p!==p){ p.vx=p.vz=0; p.run=0; continue; }   // 킥오프 전: 키커 말고는 제자리
     if (S.fk && S.fk.p===p){                                // 코너킥 키커: 공 뒤에 서서 조이스틱으로 방향만 돌림
       p.run=0;                                               // 서서 준비(달리는 다리 동작 없음)
       if (p===S.ctrl){ const iv=inputVec(); if (iv.m>0.3) S.fk.a=Math.atan2(iv.z,iv.x); }
@@ -1873,15 +1905,15 @@ function stepPlayers(dt){
           if (m){ S.fk.a=Math.atan2(m.z-p.z,m.x-p.x); p.a=S.fk.a; } throwIn(p,Math.cos(p.a),Math.sin(p.a),m?clamp(hyp(m.x-p.x,m.z-p.z)/(CONFIG.throwIn.dist[1]*MS),0.1,1):0.5); }
         continue;
       }
-      if (S.fk.kickoff){ p.a=S.fk.pa; p.x=S.fk.px; p.z=S.fk.pz; p.vx=p.vz=0; }   // 킥오프: 사람은 처음 자리·방향 그대로 가만히, 화살표만 돎
+      if (S.fk.still){ p.a=S.fk.pa; p.x=S.fk.px; p.z=S.fk.pz; p.vx=p.vz=0; }   // 킥오프: 사람은 처음 자리·방향 그대로 가만히, 화살표만 돎
       else { p.a=S.fk.a; p.vx=p.vz=0; p.x=S.fk.x-Math.cos(p.a)*0.55; p.z=S.fk.z-Math.sin(p.a)*0.55; }
-      if (S.fk.kickoff && p.team===0 && S.time>S.fk.auto && !S.charge){   // 내 킥오프를 5초 넘게 안 차면: 가까운 동료에게 약한 패스
+      if (S.fk.still && p.team===0 && S.time>S.fk.auto && !S.charge){   // 내 킥오프를 5초 넘게 안 차면: 가까운 동료에게 약한 패스
         const m=players.filter(q=>q.team===0&&!q.gk&&q!==p).sort((a,b)=>hyp(a.x-p.x,a.z-p.z)-hyp(b.x-p.x,b.z-p.z))[0];
         if (m){ S.fk.a=p.a=Math.atan2(m.z-p.z,m.x-p.x); const c=CONFIG.pass, D=hyp(m.x-p.x,m.z-p.z)/MS;
           userKick(p,"pass",clamp((D-c.dist[0])/(c.dist[1]-c.dist[0]),0.05,CONFIG.kickoffAuto.maxPower)); say("자동 패스",0.8); }
         continue;
       }
-      if (S.fk.kickoff){                                     // 상대 킥오프: 잠시 뒤 가까운 동료에게 땅볼 패스
+      if (S.fk.still){                                       // 상대 킥오프·프리킥: 잠시 뒤 가까운 동료에게 땅볼 패스
         if (p.team===1 && p.think<=0){ const m=players.filter(q=>q.team===1&&!q.gk&&q!==p).sort((a,b)=>hyp(a.x-p.x,a.z-p.z)-hyp(b.x-p.x,b.z-p.z))[0];
           if (m){ S.fk.a=p.a=Math.atan2(m.z-p.z,m.x-p.x); passTo(p,m,clamp(8+dist(p,m)*0.55,CONFIG.pass.min,CONFIG.pass.max)); } }
         continue;
@@ -2463,6 +2495,10 @@ function drawOverlay(){
       }
     }
   }
+  if (S.offLine && S.time<S.offLine.until && !MENU.has(S.mode)){   // 오프사이드 선(뒤에서 두 번째 수비수 위치)
+    const a=proj(S.offLine.x,0.05,-HW), b=proj(S.offLine.x,0.05,HW);
+    if (a&&b){ ctx.save(); ctx.strokeStyle="rgba(255,216,74,.95)"; ctx.lineWidth=3; ctx.setLineDash([10,7]); ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); ctx.restore(); }
+  }
   if (S.names && !MENU.has(S.mode)){                       // 공을 가진 선수 머리 위 영어 이름(작게, 조작 선수는 노란 표시 위)
     ctx.font="600 10px system-ui,sans-serif"; ctx.textAlign="center"; ctx.lineJoin="round";
     for (const p of players){
@@ -2505,7 +2541,7 @@ function render(){
   if (c){
     const iv=inputVec(), want=S.fk&&S.fk.p===c?S.fk.a:(iv.m>0.15?Math.atan2(iv.z,iv.x):c.a), K=CONFIG.size.player, CA=CONFIG.arrow;   // 세트피스는 실제로 찰 방향
     arrowA+=Math.atan2(Math.sin(want-arrowA),Math.cos(want-arrowA))*Math.min(1,CA.turn/60);  // 부드럽게 돌아감
-    const ac=S.fk&&S.fk.kickoff&&S.fk.p===c?ball:c;       // 킥오프: 화살표는 공 둘레를 돎
+    const ac=S.fk&&S.fk.still&&S.fk.p===c?ball:c;       // 킥오프: 화살표는 공 둘레를 돎
     arrow.position.set(ac.x+Math.cos(arrowA)*CA.ahead*K, 0.035, ac.z+Math.sin(arrowA)*CA.ahead*K);
     arrow.rotation.y=-arrowA; arrow.scale.setScalar(CA.size*K); arrow.material.color.set(S.air?0xffd84a:0xffffff);   // 공중볼을 기다리는 중이면 노랑
   }
@@ -2608,7 +2644,7 @@ $("bMute").onclick=()=>{ muted=!muted; const b=$("bMute"); b.textContent=muted?"
 
 muted=true; resetState(); muted=false;                    // 타이틀 배경용 초기 배치(소리 없이)
 $("msg").hidden=true; setMode("login");                   // 로딩 화면 → 로그인 화면
-window.GAME={ S, CONFIG, bodyClash, tryPoke, pokeTick, SAVE, AUTH, season, seasonRecord, simScore, rankOrder, ball, HL, HW, airReachable, execAirKick, BALL_HOOKS, predictFlight, flightNear, ballHits, bodyParts, get players(){ return players; }, update, press, release, render, proj, updatePose, poseProcedural, renderer, scene, camera, cam,
+window.GAME={ S, CONFIG, frontX, offsideOnKick, bodyClash, tryPoke, pokeTick, SAVE, AUTH, season, seasonRecord, simScore, rankOrder, ball, HL, HW, airReachable, execAirKick, BALL_HOOKS, predictFlight, flightNear, ballHits, bodyParts, get players(){ return players; }, update, press, release, render, proj, updatePose, poseProcedural, renderer, scene, camera, cam,
   LM, POSE_CONNECTIONS, POSE_CLIPS, loadPoseClip, fromMediaPipe, togglePose };   // 포즈 데이터 연결용
 requestAnimationFrame(t=>{ last=t; requestAnimationFrame(frame); });
 })();
