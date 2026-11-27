@@ -693,7 +693,8 @@ const CONFIG = {
   body:   { radius: 0.2, ownerStrength: 0.55, block: 0.8, ownerSlow: 0.35, loseTime: 0.7, recover: 1.5, spill: 2.8 },   // 몸싸움: 몸통 반지름(키 배율), 공 가진 선수 힘(1보다 작으면 더 밀림), 붙어서 이 시간(초) 밀리면 공을 흘림
   throwIn: { dist: [4, 15], angle: 28, time: 0.42, keep: 2 },   // 스로인: 던지는 거리(경기장 100 기준, 세기 0%~100% — 패스 최대의 절반), 던지는 각도, 동작 시간, 상대가 떨어져 있는 거리(m)
   kickoffAuto: { wait: 5, maxPower: 0.3 },   // 내 킥오프를 wait 초 안 차면 가까운 동료에게 약한(최대 maxPower) 패스
-  offside: { tol: 0.15 },   // 같은 선으로 봐주는 여유(m)
+  offside: { tol: 0.15 },
+  attackRun: { over: 2.0, wait: 1.0, goTime: 4.0, backTime: 2.0, waitTime: 0.7 },   // 침투: 선을 넘는 거리(m), 돌아와 서는 곳(선 뒤 m), 뛰는 최대 시간, 돌아오는 시간, 다시 뛰기 전 기다림   // 같은 선으로 봐주는 여유(m)
   poke:   { range: 2.25, reach: 1.15, time: 0.34, hitFrom: 0.07, hitTo: 0.24, slack: 0.06, push: 4.5, cool: 0.45, mateCool: 0.9 },   // 발 뻗어 뺏기: 공까지 거리(m) 안이면 뻗음, 동작 시간, 발 판정이 켜지는 구간, 발 판정 여유, 공이 튕겨 나가는 속도
   gk:     { speed: 6.5, dive: 6.0, reach: 1.1, reactMin: 0.17, reactMax: 0.33, catch: 0.6, hold: 1.1, userHold: 8, carry: 4, punt: [28, 62] },   // userHold: 내 골키퍼가 공을 들고 있을 수 있는 시간, carry: 들고 걷는 속도, punt: 슛 버튼 롱킥 거리
   cpu:    { activeAbove: 4, pokeCool: 0.55, pressRange: 14, slideChance: 0.6, think: 0.3, shootRange: 20, passUrge: 0.1, shotError: 0.15 },
@@ -1777,15 +1778,16 @@ function cpuThink(p){
   }
   if (toLine<14 && Math.abs(p.z)>PBZ-5 && Math.random()<0.5){
     let m=null, bd=1e9;
-    for (const q of players) if (q.team===p.team && q!==p && !q.gk){ const d=hyp(q.x-(gx-p.dir*10),q.z); if (d<bd){bd=d;m=q;} }
+    for (const q of players) if (q.team===p.team && q!==p && !q.gk && !offsideNow(q)){ const d=hyp(q.x-(gx-p.dir*10),q.z); if (d<bd){bd=d;m=q;} }
     if (m) return crossTo(p,m.x+m.vx,m.z+m.vz,m);
   }
   if (pr<3.2 || Math.random()<c.passUrge){
     let best=null, bs=2;
     for (const m of players){
-      if (m.team!==p.team || m===p || m.gk) continue;
+      if (m.team!==p.team || m===p || m.gk || offsideNow(m)) continue;   // 지금 오프사이드 위치인 동료에게는 안 줌
       const d=dist(p,m); if (d<6 || d>34*(SX+SZ)/2) continue;
       let sc=(m.x-p.x)*p.dir*0.6+rnd(0,6);
+      if (m.runPh==="go" && (m.vx*p.dir)>3) sc+=8;            // 선 뒤에서 막 뛰어드는 침투 선수에게 찔러 줌
       if (nearestOpp(m,m.x,m.z)[0]<4) sc-=6;
       for (const q of players) if (q.team!==p.team){               // 패스 길이 막혔는지
         const t=clamp(((q.x-p.x)*(m.x-p.x)+(q.z-p.z)*(m.z-p.z))/(d*d),0,1);
@@ -1795,6 +1797,45 @@ function cpuThink(p){
     }
     if (best) passTo(p,best,clamp(8+dist(p,best)*0.55,CONFIG.pass.min,CONFIG.pass.max));
   }
+}
+/* ===== 공격 침투(오프사이드 선 활용) =====
+   우리 팀이 상대 진영에서 공을 가지면: 공에 가장 가까운 동료(공 가진 선수·골키퍼·내가 조작하는 선수 제외)가
+   상대와 겹치지 않는 길로 오프사이드 선을 살짝 넘는 곳까지 전력질주 → 패스가 안 오면 선 바로 뒤로 돌아와 잠깐 기다렸다 다시 뜀.
+   나머지 동료는 오프사이드 선 바로 뒤까지만 올라감 */
+function offsideNow(q){ const s=q.team===0?1:-1; return frontX(q,s)*s>offLineX(q.team)*s+CONFIG.offside.tol; }
+function offLineX(team){                                  // 이 팀이 공격할 때 오프사이드 선(x). 뒤에서 두 번째 상대·공·하프라인 중 가장 앞
+  const sign=team===0?1:-1, opp=players.filter(q=>q.team!==team).map(q=>frontX(q,sign)*sign).sort((a,b)=>b-a);
+  return Math.max(opp[1]??0, ball.x*sign, 0)*sign;
+}
+function attackRun(p,o){
+  const A=CONFIG.attackRun, sign=p.dir, line=offLineX(p.team)*sign;
+  const mates=players.filter(q=>q.team===p.team && q!==o && !q.gk && !(q.team===0 && q===S.ctrl));
+  let runner=null, bd=1e9; for (const q of mates){ const d=hyp(q.x-ball.x,q.z-ball.z); if (d<bd){ bd=d; runner=q; } }
+  if (o.x*sign<=0 || p!==runner){                          // 침투하지 않는 선수: 오프사이드 선 바로 뒤까지만
+    p.runPh=null; const [hx,hz]=formation(p); return [Math.min(hx*sign,line-A.wait)*sign,hz];
+  }
+  if (!p.runPh){ p.runPh="go"; p.runT=0; }
+  p.runT+=STEP;
+  if (p.runPh==="go"){
+    const tx=line+A.over;
+    if (p.x*sign>tx-0.8 || p.runT>A.goTime){ p.runPh="back"; p.runT=0; }
+    else { p.lane=runLane(p,tx*sign); return [tx*sign,p.lane]; }
+  }
+  if (p.runPh==="back"){
+    const tx=line-A.wait; if (p.x*sign<tx+0.4 || p.runT>A.backTime){ p.runPh="wait"; p.runT=0; }
+    return [tx*sign,p.lane??p.z];
+  }
+  if (p.runPh==="wait" && p.runT>A.waitTime){ p.runPh="go"; p.runT=0; }
+  return [(line-A.wait)*sign,p.lane??p.z];
+}
+function runLane(p,x){                                    // 상대와 겹치지 않는 길: 지금 z 둘레 후보 중 그 x 근처 상대와 가장 먼 z
+  let best=p.z, bs=-1;
+  for (const dz of [0,-3,3,-6,6,-9,9]){
+    const z=clamp(p.z+dz,-HW+3,HW-3); let m=1e9;
+    for (const q of players) if (q.team!==p.team){ const d=Math.min(hyp(q.x-x,q.z-z), hyp(q.x-(p.x+x)/2,q.z-(p.z+z)/2)); m=Math.min(m,d); }
+    const sc=m-Math.abs(dz)*0.15; if (sc>bs){ bs=sc; best=z; }
+  }
+  return best;
 }
 function aiTarget(p,near){
   const o=ball.owner;
@@ -1806,6 +1847,7 @@ function aiTarget(p,near){
     if (d<4.5 && (q.x-p.x)*p.dir>0) tz=p.z+(p.z>=q.z?7:-7);
     return [tx,clamp(tz,-HW+2,HW-2)];
   }
+  if (o && o.team===p.team && !p.gk){ const r=attackRun(p,o); if (r) return r; }
   if (!o){
     const r=S.recv[p.team];
     if (r===p || (!r && near[0]===p)) return interceptPoint(p);
