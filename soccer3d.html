@@ -692,7 +692,7 @@ const CONFIG = {
   tackle: { user: 3.0, cpu: 1.2, slideSpeed: 9, slideTime: 0.55 },       // 초당 공 뺏기 확률(상대 팀만 씀. 우리 팀은 발 뻗기 접촉으로만 뺏음)
   body:   { radius: 0.2, ownerStrength: 0.55, block: 0.8, ownerSlow: 0.35, loseTime: 0.7, recover: 1.5, spill: 2.8 },   // 몸싸움: 몸통 반지름(키 배율), 공 가진 선수 힘(1보다 작으면 더 밀림), 붙어서 이 시간(초) 밀리면 공을 흘림
   throwIn: { dist: [4, 15], angle: 28, time: 0.42, keep: 2 },   // 스로인: 던지는 거리(경기장 100 기준, 세기 0%~100% — 패스 최대의 절반), 던지는 각도, 동작 시간, 상대가 떨어져 있는 거리(m)
-  kickoffAuto: { wait: 5, maxPower: 0.3 },   // 내 킥오프를 wait 초 안 차면 가까운 동료에게 약한(최대 maxPower) 패스
+  kickoffAuto: { wait: 8, maxPower: 0.3 },   // 내 킥오프를 wait 초 안 차면 가까운 동료에게 약한(최대 maxPower) 패스
   offside: { tol: 0.15 },
   attackRun: { over: 2.0, wait: 1.0, goTime: 4.0, backTime: 2.0, waitTime: 0.7 },   // 침투: 선을 넘는 거리(m), 돌아와 서는 곳(선 뒤 m), 뛰는 최대 시간, 돌아오는 시간, 다시 뛰기 전 기다림   // 같은 선으로 봐주는 여유(m)
   poke:   { range: 2.25, reach: 1.15, time: 0.34, hitFrom: 0.07, hitTo: 0.24, slack: 0.06, push: 4.5, cool: 0.45, mateCool: 0.9 },   // 발 뻗어 뺏기: 공까지 거리(m) 안이면 뻗음, 동작 시간, 발 판정이 켜지는 구간, 발 판정 여유, 공이 튕겨 나가는 속도
